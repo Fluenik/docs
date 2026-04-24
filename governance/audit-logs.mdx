@@ -1,0 +1,134 @@
+---
+title: Audit logs
+description: "Every decision — every tool call, every eval check, every approval — captured in a signed, searchable audit log."
+---
+
+BRAM writes an append-only audit log of every decision it makes. The log is the source of truth for compliance reviews, post-incident analysis, and regulatory reporting.
+
+## What gets logged
+
+<CardGroup cols={2}>
+  <Card title="Eval checks" icon="shield-check">
+    Every call to `/v1/evals/check` → full trace (query, answer, verdict, score, findings, claim-level results).
+  </Card>
+  <Card title="Tool calls" icon="wrench">
+    Every tool call proxied through BRAM MCP → tool name, arguments, result, policy decision.
+  </Card>
+  <Card title="Approvals" icon="bell">
+    Every `require_approval` decision → request, responder, scope, outcome.
+  </Card>
+  <Card title="Policy changes" icon="pen">
+    Every policy edit → who, when, diff, rollout state.
+  </Card>
+</CardGroup>
+
+## Log structure
+
+Each entry is a JSON record:
+
+```json
+{
+  "id": "log_01HK…",
+  "workspace_id": "ws_acme",
+  "timestamp": "2026-04-23T18:42:12.091Z",
+  "actor": {
+    "type": "agent",
+    "agent_id": "support-bot-prod",
+    "client": "cursor"
+  },
+  "event_type": "eval.check",
+  "resource": {
+    "kind": "trace",
+    "id": "trc_01HKB…",
+    "project_id": 42,
+    "policy_id": 17,
+    "policy_version": 3
+  },
+  "decision": {
+    "verdict": "fail",
+    "suggested_action": "block",
+    "overall_score": 0.72,
+    "findings_count": 3
+  },
+  "payload_hash": "sha256:7f2a…",
+  "signature": "ed25519:…"
+}
+```
+
+Key fields:
+
+- **`actor`** — who made the request (agent, user, API key)
+- **`event_type`** — `eval.check`, `mcp.tool_call`, `approval.decision`, `policy.update`, etc.
+- **`payload_hash`** — SHA-256 of the request/response payload; the payload itself can be stored or dropped based on your retention settings
+- **`signature`** — Ed25519 signature covering the preceding hash chain (the *previous* log entry's id + current entry's content). Breaks the chain if tampered with.
+
+## Retention + storage tiers
+
+| Tier | Duration | Storage |
+|---|---|---|
+| **Hot** | 30 days | Fully searchable via the dashboard + API |
+| **Warm** | 90 days | Exportable to parquet on demand |
+| **Cold** | 7 years | Glacier-style archive for compliance |
+
+Retention is per-workspace and per-event-type — e.g. you can keep `mcp.tool_call` events for 30 days but `eval.check` events for 7 years.
+
+## Search + filter
+
+In the dashboard, **Audit Log** supports:
+
+- Time range picker
+- Text search over `actor.id`, `resource.id`, `decision.verdict`
+- Filter by event type, project, policy version
+- Saved filters (per user)
+
+In the API:
+
+```bash
+curl -s "https://api.getbram.com/api/governor/v1/audit/events/?from=2026-04-01&to=2026-04-23&event_type=eval.check&verdict=fail" \
+  -H "Authorization: Bearer $BRAM_API_KEY" | jq
+```
+
+## Payload storage
+
+By default, **payload bodies are not stored** — only the hash is. This is the default for two reasons:
+
+1. Tool arguments and model outputs often contain PII, secrets, or internal data you don't want long-term in a third-party system
+2. Storage + retrieval costs scale with payload size; most compliance reviews only need the *fact* that something happened, not the bytes
+
+To store payloads, opt in per-policy or per-project:
+
+```json
+{
+  "audit": {
+    "store_payloads": true,
+    "retention_days": 30,
+    "payload_encryption_key": "arn:aws:kms:..."
+  }
+}
+```
+
+With `store_payloads: true` and a customer-managed KMS key, payloads are encrypted at write and you own the key — BRAM can't decrypt them without your KMS ARN being granted to our IAM role (the standard AWS External ID + role-assumption pattern).
+
+## Exports
+
+From the dashboard **Audit Log → Exports**:
+
+- **Parquet** — for data lake ingestion
+- **CSV** — for auditor delivery
+- **JSON Lines** — for log aggregation (Datadog, Splunk, Sumo)
+- **Signed evidence bundle** — a tarball with the full chain + a public key for verification. Use this for formal compliance audits.
+
+Exports are asynchronous; you get an email + dashboard notification when the archive is ready.
+
+## Compliance profiles
+
+Pre-built retention + storage profiles:
+
+| Profile | Payload | Retention | Notes |
+|---|---|---|---|
+| **SOC 2** | Hash only | 1 year hot + cold | Default for new workspaces |
+| **GDPR** | Hash only, right-to-erasure hooks | 30 days hot + warm | DSARs supported out of the box |
+| **HIPAA** | Encrypted with customer KMS | 6 years | BAA required; contact sales |
+| **FINRA** | Encrypted with customer KMS + WORM | 7 years | Immutable cold tier on S3 Object Lock |
+
+Switch profiles in **Settings → Compliance**. Changing retention only applies to events **written after** the change; historical events keep their original retention.

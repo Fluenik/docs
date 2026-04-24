@@ -1,0 +1,70 @@
+---
+title: "Runtime keys"
+description: "Issue, list, and revoke runtime keys bound to a project."
+---
+
+Auth: **API key** (`Authorization: Bearer bak_…`).
+
+Runtime keys authenticate calls to `/v1/evals/check` and `/v1/evals/check/batch`. Every key is bound to exactly one project.
+
+## List keys
+
+```http
+GET /api/governor/v1/evals/keys/
+GET /api/governor/v1/evals/keys/?project_id=42
+```
+
+Returns key metadata (prefix, last used, is active) — **not** plaintext.
+
+## Issue a key
+
+```http
+POST /api/governor/v1/evals/keys/
+```
+
+Body:
+```json
+{
+  "project_id": 42,
+  "name": "Support production key"
+}
+```
+
+Response (**plaintext returned once, not stored**):
+```json
+{
+  "key": {
+    "id": 123,
+    "project_id": 42,
+    "project_name": "Support bot production",
+    "name": "Support production key",
+    "key_prefix": "brk_live_7f2a",
+    "is_active": true,
+    "last_used_at": null,
+    "created_at": "2026-04-23T18:42:12Z"
+  },
+  "plain_text_key": "brk_live_7f2a8e3c0b4d12f9…",
+  "check_endpoint_url": "https://api.getbram.com/api/governor/v1/evals/check/"
+}
+```
+
+<Warning>
+  Copy `plain_text_key` immediately. We hash + discard the plaintext after response — it can't be retrieved again.
+</Warning>
+
+## Revoke a key
+
+```http
+DELETE /api/governor/v1/evals/keys/{id}/
+```
+
+Takes effect immediately — subsequent requests return `401 unauthorized`. Revoked keys stay in the dashboard for audit history but can't be restored.
+
+## Rotation pattern
+
+1. Issue a new key (existing key keeps working)
+2. Roll the new key to your app / secret store
+3. Wait for `last_used_at` on the old key to stop advancing (typically 1–2 minutes in a healthy deploy)
+4. Revoke the old key
+
+Zero-downtime rotation is the expected pattern — never revoke before rolling.

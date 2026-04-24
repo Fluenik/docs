@@ -1,0 +1,186 @@
+---
+title: Evals quickstart
+description: "Create a project, issue a key, send your first check — five minutes."
+---
+
+<Steps>
+  <Step title="Create a project">
+    In [app.getbram.com](https://app.getbram.com), click **Evals** → **+ New eval project**.
+
+    <img src="/images/evals-new-project.png" alt="New eval project modal" />
+
+    Pick:
+    - A **name** + **slug** (e.g. `Support bot production` / `support_bot_prod`)
+    - A **domain** — `customer_support` for a support bot, `finance` for money-involved flows, `generic` if you're not sure
+    - A **default mode** — `detect` for the first week, tighten later
+  </Step>
+
+  <Step title="Issue a runtime key">
+    Open the **Keys** tab inside your project → **Issue runtime key**.
+
+    Copy the key shown in the dialog — we never store the plaintext, so this is your one chance.
+
+    ```bash
+    export BRAM_RUNTIME_KEY="brk_live_7f2a…"
+    ```
+  </Step>
+
+  <Step title="Send a check">
+    ```bash
+    curl -s https://api.getbram.com/api/governor/v1/evals/check/ \
+      -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "query": "How do I reset my password?",
+        "answer": "Click the Forgot password link on the sign-in page.",
+        "context_chunks": [
+          {"id": "kb_5", "text": "Users can reset passwords from the Forgot password link."}
+        ],
+        "citations": [{"sentence_index": 0, "chunk_ids": ["kb_5"]}]
+      }' | jq
+    ```
+
+    Expected output:
+
+    ```json
+    {
+      "verdict": "pass",
+      "overall_score": 0.08,
+      "suggested_action": "allow",
+      "trace_id": "trc_01HKB…"
+    }
+    ```
+  </Step>
+
+  <Step title="See it in the dashboard">
+    Go to the **Runs** tab. The trace you just sent will appear within a second.
+
+    Click into it to see:
+    - The full request + response
+    - Claim-by-claim breakdown
+    - Which deterministic checks fired, which didn't
+    - Whether the AI judge ran (and if so, its reasoning)
+  </Step>
+</Steps>
+
+## Wire it into your app
+
+The canonical pattern: **call BRAM after your LLM returns, before you return to the user.**
+
+<CodeGroup>
+```ts TypeScript
+async function answerWithGovernance(query: string, chunks: Chunk[]) {
+  const completion = await openai.chat.completions.create({...})
+  const answer = completion.choices[0].message.content ?? ''
+
+  const check = await fetch('https://api.getbram.com/api/governor/v1/evals/check/', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.BRAM_RUNTIME_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query,
+      answer,
+      context_chunks: chunks,
+      mode: 'detect',
+      request_id: completion.id,
+    }),
+  }).then(r => r.json())
+
+  if (check.verdict === 'fail') {
+    // block, log, serve a safe fallback
+    return { text: "I'm not able to answer that right now.", trace: check.trace_id }
+  }
+  if (check.corrected_answer) {
+    return { text: check.corrected_answer, trace: check.trace_id }
+  }
+  return { text: answer, trace: check.trace_id }
+}
+```
+
+```python Python
+import httpx, os
+
+async def answer_with_governance(query: str, chunks: list) -> dict:
+    completion = await openai.chat.completions.create(...)
+    answer = completion.choices[0].message.content or ""
+
+    async with httpx.AsyncClient() as c:
+        r = await c.post(
+            "https://api.getbram.com/api/governor/v1/evals/check/",
+            headers={"Authorization": f"Bearer {os.environ['BRAM_RUNTIME_KEY']}"},
+            json={
+                "query": query,
+                "answer": answer,
+                "context_chunks": chunks,
+                "mode": "detect",
+                "request_id": completion.id,
+            },
+            timeout=5.0,
+        )
+    check = r.json()
+
+    if check["verdict"] == "fail":
+        return {"text": "I'm not able to answer that right now.", "trace": check["trace_id"]}
+    if check.get("corrected_answer"):
+        return {"text": check["corrected_answer"], "trace": check["trace_id"]}
+    return {"text": answer, "trace": check["trace_id"]}
+```
+
+```go Go
+func answerWithGovernance(ctx context.Context, query string, chunks []Chunk) (AnswerResult, error) {
+    answer := callLLM(ctx, query, chunks)
+
+    body, _ := json.Marshal(map[string]any{
+        "query": query,
+        "answer": answer,
+        "context_chunks": chunks,
+        "mode": "detect",
+    })
+    req, _ := http.NewRequestWithContext(ctx, "POST",
+        "https://api.getbram.com/api/governor/v1/evals/check/",
+        bytes.NewReader(body))
+    req.Header.Set("Authorization", "Bearer "+os.Getenv("BRAM_RUNTIME_KEY"))
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil { return AnswerResult{}, err }
+    defer resp.Body.Close()
+
+    var check CheckResponse
+    json.NewDecoder(resp.Body).Decode(&check)
+
+    switch check.Verdict {
+    case "fail":
+        return AnswerResult{Text: "I'm not able to answer that right now.", Trace: check.TraceID}, nil
+    }
+    if check.CorrectedAnswer != "" {
+        return AnswerResult{Text: check.CorrectedAnswer, Trace: check.TraceID}, nil
+    }
+    return AnswerResult{Text: answer, Trace: check.TraceID}, nil
+}
+```
+</CodeGroup>
+
+## Tighten the loop
+
+The first week, run in **`detect`** mode. Don't change behaviour — just observe. Watch pass-rate, fail-rate, and which claims get flagged.
+
+Once you trust the verdicts:
+
+1. Flip the policy to **`detect_and_rewrite`** — the engine will auto-correct unsupported spans when safe
+2. For high-stakes flows (finance / medical), flip to **`block_on_fail`** and serve a safe fallback when the verdict is `fail`
+
+## Next
+
+<CardGroup cols={3}>
+  <Card title="Runtime API reference" icon="terminal" href="/api-reference/evals/check">
+    Every field in the request + response.
+  </Card>
+  <Card title="Tune policies" icon="sliders" href="/evals/policies">
+    Domain defaults, thresholds, confidence bands.
+  </Card>
+  <Card title="Offline datasets" icon="flask" href="/evals/datasets">
+    Regression-test every release against a fixed corpus.
+  </Card>
+</CardGroup>

@@ -1,0 +1,156 @@
+---
+title: Quickstart
+description: "Get BRAM running in five minutes — from zero to a governed agent with a live eval loop."
+---
+
+This guide takes you from signup to a working setup with:
+
+- A **BRAM MCP gateway** proxying your agent's tool calls
+- An **eval project** + runtime key for the `/v1/evals/check` API
+- A first **policy** that enforces citation-grounding and blocks unsupported claims
+
+Total time: about five minutes.
+
+## 1. Create your workspace
+
+Sign in at [app.getbram.com](https://app.getbram.com) with your email. Every new account gets a workspace and an `Overview` dashboard. Invite your team later — no team set-up is required to finish this guide.
+
+## 2. Pick your integration surface
+
+BRAM has two surfaces, and you don't need both to start:
+
+<Tabs>
+  <Tab title="Runtime API (fastest)">
+    Call our Evals API inline from your app. No local install. One bearer token.
+
+    ```bash
+    curl https://api.getbram.com/api/governor/v1/evals/check/ \
+      -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "query": "Can I get a refund after 30 days?",
+        "answer": "Yes, refunds are available within 60 days.",
+        "context_chunks": [
+          {"id": "kb_1", "text": "All refund requests must be submitted within 30 days of purchase."}
+        ]
+      }'
+    ```
+
+    Use this if you have a RAG app, a chatbot, or an agentic workflow that already calls an LLM — you just want BRAM to judge the output.
+
+    [Continue to the Evals quickstart →](/evals/quickstart)
+  </Tab>
+  <Tab title="MCP gateway (agents)">
+    Install **BRAM Desktop**, point any MCP-compatible client (Claude Desktop, Cursor, Cline) at it, and every tool call your agent makes is proxied through your policies.
+
+    ```bash
+    # macOS
+    brew install bram-ai/tap/bram-desktop
+
+    # Windows
+    winget install bram.bram-desktop
+
+    # Linux
+    curl -fsSL https://getbram.com/install.sh | sh
+    ```
+
+    Use this if you're running MCP-based agents on your own machine or behind your firewall.
+
+    [Continue to the MCP quickstart →](/mcp/installation)
+  </Tab>
+</Tabs>
+
+## 3. Issue a runtime key
+
+Both surfaces authenticate with a **runtime key** scoped to a single **project**. Projects are the unit of isolation — a project has its own policy, its own quotas, and its own audit stream.
+
+<Steps>
+  <Step title="Open the Evals page">
+    In [app.getbram.com](https://app.getbram.com), click **Evals** in the left nav.
+  </Step>
+  <Step title="Create a project">
+    Click **+ New eval project**. Name it something like `support-bot-prod`. Pick a domain (`generic` is fine for first-time) and mode (`detect` — we'll tighten to `block_on_fail` later).
+  </Step>
+  <Step title="Issue a runtime key">
+    In your project, open the **Keys** tab → **Issue runtime key**. Copy the plaintext key shown once — we never store it after issuing.
+
+    ```bash
+    export BRAM_RUNTIME_KEY="brk_live_7f2a…"
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The runtime key is shown **once at creation** and can't be retrieved again. If you lose it, revoke it and issue a new one.
+</Warning>
+
+## 4. Ship a policy
+
+A policy defines the rules a project enforces. Create one from the **Policies** tab:
+
+```json
+{
+  "name": "Grounded answers",
+  "slug": "grounded_answers",
+  "project_id": 42,
+  "domain": "customer_support",
+  "risk_level": "high",
+  "default_mode": "detect",
+  "require_citations": true,
+  "require_evidence_for_factual": true,
+  "abstain_on_missing_evidence": true,
+  "enable_ai_judge": true,
+  "pass_threshold": 0.2,
+  "warn_threshold": 0.45,
+  "fail_threshold": 0.65
+}
+```
+
+Every response your app sends through `/v1/evals/check` will now be graded against this policy. Findings, verdicts, and trace IDs show up live under the **Runs** tab.
+
+## 5. Confirm it's wired up
+
+Send a single check and watch it land in the dashboard:
+
+```bash
+curl -s https://api.getbram.com/api/governor/v1/evals/check/ \
+  -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How do I reset my password?",
+    "answer": "Click the Forgot password link on the sign-in page.",
+    "context_chunks": [
+      {"id": "kb_5", "text": "Users can reset passwords from the Forgot password link."}
+    ],
+    "citations": [{"sentence_index": 0, "chunk_ids": ["kb_5"]}]
+  }' | jq
+```
+
+Expected response:
+
+```json
+{
+  "verdict": "pass",
+  "overall_score": 0.08,
+  "deterministic_score": 0.08,
+  "ai_score": 0.0,
+  "suggested_action": "allow",
+  "trace_id": "trc_01HKB…"
+}
+```
+
+Reload the **Runs** tab and you'll see the trace appear. Click into it to see the full claim-by-claim breakdown.
+
+## Where to next
+
+<CardGroup cols={3}>
+  <Card title="Govern an agent" icon="robot" href="/mcp/agents">
+    Plug BRAM Desktop in front of Claude / Cursor / Cline.
+  </Card>
+  <Card title="Write better policies" icon="shield-check" href="/governance/policies">
+    Per-domain thresholds, tool-consistency rules, abstention enforcement.
+  </Card>
+  <Card title="Run offline evals" icon="flask" href="/evals/datasets">
+    Regression-test every release against a fixed dataset.
+  </Card>
+</CardGroup>

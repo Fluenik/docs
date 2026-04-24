@@ -1,0 +1,101 @@
+---
+title: Authentication
+description: "Two kinds of tokens — runtime keys for /v1/evals/check, API keys for everything else."
+---
+
+## Bases
+
+| Kind | Base URL |
+|---|---|
+| REST API | `https://api.getbram.com/api/governor/v1` |
+| Dashboard | `https://app.getbram.com` |
+
+## Two token types
+
+<CardGroup cols={2}>
+  <Card title="Runtime keys" icon="key">
+    Scoped to a **single project**. Used by your application servers to call `/v1/evals/check` and `/v1/evals/check/batch`.
+
+    Issue + manage from **Evals → Keys** inside a project.
+
+    ```
+    Authorization: Bearer brk_live_7f2a…
+    ```
+  </Card>
+  <Card title="API keys" icon="lock">
+    Workspace-scoped. Used for administrative calls — creating projects, policies, datasets, webhooks.
+
+    Issue from **Settings → API Keys**.
+
+    ```
+    Authorization: Bearer bak_live_9c1b…
+    ```
+  </Card>
+</CardGroup>
+
+Both token types:
+
+- Are shown **once at creation** — you can't retrieve the plaintext after
+- Can be revoked instantly from the dashboard
+- Carry a `key_prefix` (e.g. `brk_live_7f2a`) that's safe to log and show in the UI
+
+## Making a request
+
+```bash
+curl -sS https://api.getbram.com/api/governor/v1/evals/projects/ \
+  -H "Authorization: Bearer $BRAM_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+On success: `200 OK` with a JSON body. On auth failure: `401 Unauthorized` with a JSON error.
+
+## Scopes
+
+Runtime keys can optionally carry a scope that narrows what they can do:
+
+| Scope | Allows |
+|---|---|
+| `evaluations:read` | GET `/v1/evals/check/...` (inspect past checks) |
+| `evaluations:write` | POST `/v1/evals/check/`, `/v1/evals/check/batch/` |
+| `evaluations:rw` | Both — the default |
+
+Scopes are set when you issue the key. Trying to use a key outside its scope returns `403 Forbidden`.
+
+## Rate limits
+
+| Endpoint | Limit |
+|---|---|
+| `POST /v1/evals/check/` | 600 req/min per runtime key (raisable on paid plans) |
+| `POST /v1/evals/check/batch/` | 60 req/min per runtime key |
+| Everything else | 300 req/min per API key |
+
+When exceeded: `429 Too Many Requests` with `Retry-After` seconds + `X-BRAM-RateLimit-Reset` unix timestamp.
+
+## Error envelope
+
+Every error response uses the same shape:
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "The runtime key is invalid or revoked.",
+    "request_id": "req_01HK…"
+  }
+}
+```
+
+Codes you'll see most:
+
+| HTTP | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request` | Malformed JSON or missing required field |
+| 401 | `unauthorized` | Missing, malformed, or revoked token |
+| 403 | `forbidden` | Token exists but lacks scope or workspace access |
+| 404 | `not_found` | Resource doesn't exist or isn't visible to your workspace |
+| 409 | `conflict` | Slug collision, version conflict |
+| 422 | `validation_failed` | JSON parsed but values violate schema |
+| 429 | `rate_limited` | Slow down; see `Retry-After` |
+| 500 | `internal_error` | We screwed up — include `request_id` when filing a bug |
+
+Always log `request_id` on the client side — it's the fastest way for us to trace an issue.

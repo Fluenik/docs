@@ -1,0 +1,69 @@
+---
+title: "Webhooks"
+description: "Create, list, update, and test webhooks that deliver real-time events."
+---
+
+Auth: **API key** (`Authorization: Bearer bak_…`).
+
+See [Evals → Webhooks](/evals/webhooks) for event payloads and signature verification. This page covers the REST surface.
+
+## List webhooks
+
+```http
+GET /api/governor/v1/evals/webhooks/
+GET /api/governor/v1/evals/webhooks/?project_id=42
+```
+
+## Create a webhook
+
+```http
+POST /api/governor/v1/evals/webhooks/
+```
+
+Body:
+```json
+{
+  "name": "Ops alerts",
+  "project_id": 42,
+  "target_url": "https://hooks.example.com/governance-evals",
+  "signing_secret": "whsec_…",
+  "event_types": ["eval.completed", "trace.fail_rate_threshold"],
+  "is_active": true
+}
+```
+
+Set `project_id: null` for a workspace-wide webhook that receives events for every project.
+
+`signing_secret` is optional but strongly recommended. Use any secret you generate (or leave blank and set it later from the dashboard to get a server-generated one).
+
+## Send a test delivery
+
+```http
+POST /api/governor/v1/evals/webhooks/test/
+```
+
+Body:
+```json
+{"webhook_id": 17}
+```
+
+Sends a synthetic `eval.completed` payload to the webhook's `target_url` and records the response. Useful for confirming connectivity without waiting for a real event.
+
+## Update + delete
+
+```http
+PATCH /api/governor/v1/evals/webhooks/{id}/
+DELETE /api/governor/v1/evals/webhooks/{id}/
+```
+
+Toggle `is_active: false` to pause a webhook without deleting it — retains history + retry state.
+
+## Delivery history
+
+Every delivery is retained for 30 days. See them in the dashboard **Webhooks → Deliveries** tab, or via:
+
+```http
+GET /api/governor/v1/evals/webhooks/{id}/deliveries/
+```
+
+Each delivery entry carries request + response bodies, response status, attempt count, and retry schedule.

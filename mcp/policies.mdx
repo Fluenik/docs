@@ -1,0 +1,152 @@
+---
+title: Writing policies
+description: "YAML-based rules that govern every tool call your agent makes."
+---
+
+BRAM policies are YAML files. Each policy is a list of **rules**, and each rule matches on tool name, arguments, or context and produces a **decision**: `allow`, `deny`, or `require_approval`.
+
+The default policy lives at `~/.bram/policy.yaml`. You can point BRAM at a different file with `BRAM_POLICY_PATH=...` or via the **Settings → Policy** panel.
+
+## Policy structure
+
+```yaml
+version: 1
+description: "Default policy — auto-approve reads, prompt for writes, deny destructive ops."
+
+rules:
+  # 1. Auto-approve safe read operations
+  - match:
+      tool: "filesystem.read_file"
+    decision: allow
+
+  # 2. Prompt for anything that writes to disk
+  - match:
+      tool: "filesystem.write_file"
+    decision: require_approval
+    reason: "Writing to {{args.path}}"
+
+  # 3. Block writes outside the project
+  - match:
+      tool: "filesystem.write_file"
+      args:
+        path: "!startswith:/Users/kyle/projects/"
+    decision: deny
+    reason: "Writes outside projects/ are not permitted"
+
+  # 4. Require approval for any GitHub write
+  - match:
+      tool_prefix: "github."
+      args:
+        # any mutation — create, update, merge, delete
+        $action: "!=read"
+    decision: require_approval
+    reason: "GitHub write: {{tool}}"
+
+  # 5. Default — fall through to approval
+  - decision: require_approval
+    reason: "Unclassified tool call"
+```
+
+Rules are evaluated **top-down**. The first match wins. The final rule without a `match` acts as a catch-all.
+
+## Match predicates
+
+### By tool name
+
+```yaml
+match:
+  tool: "gmail.send_email"               # exact match
+  tool_prefix: "shopify."                # prefix match
+  tool_glob: "github.create_*"           # glob match
+```
+
+### By argument
+
+```yaml
+match:
+  tool: "database.execute"
+  args:
+    statement: "regex:^(DROP|TRUNCATE|DELETE)"    # regex on a string arg
+    database: "prod"                               # exact match
+    row_limit: ">1000"                             # numeric comparison
+    dry_run: false                                 # boolean
+```
+
+Supported operators:
+
+| Operator | Example | Matches |
+|---|---|---|
+| *(none)* | `name: foo` | equals |
+| `regex:` | `statement: "regex:^DROP"` | regex match |
+| `glob:` | `path: "glob:/tmp/*"` | glob match |
+| `startswith:` | `path: "startswith:/etc"` | prefix match |
+| `!startswith:` | `path: "!startswith:/tmp"` | negated prefix |
+| `in:` | `domain: "in:prod,staging"` | membership |
+| `>`, `>=`, `<`, `<=` | `amount: ">1000"` | numeric comparison |
+
+### By context
+
+```yaml
+match:
+  tool: "slack.post_message"
+  context:
+    time: "outside:09:00-17:00"        # business hours
+    day: "in:sat,sun"                  # weekends
+    user_idle_minutes: ">30"           # unattended
+```
+
+## Decisions
+
+<CardGroup cols={3}>
+  <Card title="allow" icon="check">
+    Auto-approve — pass the tool call through to the upstream MCP server.
+  </Card>
+  <Card title="require_approval" icon="bell">
+    Surface a native OS modal with full tool context; block the call until a human decides.
+  </Card>
+  <Card title="deny" icon="xmark">
+    Block the tool call. Agent sees a tool error with `reason`.
+  </Card>
+</CardGroup>
+
+Every decision is recorded to the audit log with the matching rule's index, so you can trace why a call was allowed/blocked.
+
+## Time-boxed trust
+
+Approvals can be **remembered for a window**:
+
+```yaml
+- match:
+    tool_prefix: "gmail."
+  decision: require_approval
+  remember:
+    scope: "session"          # until BRAM restarts
+    duration: "10m"           # or for 10 minutes
+    key: "gmail-all"          # grouped so one approval covers all gmail.*
+```
+
+The approval modal will show a **Remember for 10 min** toggle. Check it, and identical calls in the window auto-approve without re-prompting.
+
+## Testing policies
+
+Run your policy against a dry-run corpus:
+
+```bash
+bram policy test ~/.bram/policy.yaml --fixtures ~/.bram/fixtures/
+```
+
+Fixtures are JSON files with `tool`, `args`, and an expected `decision`. `bram policy test` runs each one through the policy and reports mismatches.
+
+## Hosted policies (team plans)
+
+On team plans, policies can be managed centrally from the BRAM dashboard:
+
+1. Write the policy once in app.getbram.com
+2. Every team member's BRAM Desktop pulls it on startup
+3. Overrides are tracked per-user and require admin approval
+
+See [Governance → Policies](/governance/policies) for the full schema and API.
+
+<Card title="Next: native approval flows" icon="arrow-right" href="/governance/approvals">
+  How approval modals work across macOS, Windows, and Linux.
+</Card>

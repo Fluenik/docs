@@ -1,0 +1,191 @@
+---
+title: "POST /v1/evals/check"
+openapi: "POST /api/governor/v1/evals/check/"
+description: "Grade a single LLM response against the policy attached to the runtime key's project."
+---
+
+Auth: **runtime key** (`Authorization: Bearer brk_…`).
+
+Max request body: 256 KB.
+
+## Request body
+
+| Field | Type | Required | Notes |
+|---|---|:-:|---|
+| `query` | string | ✓ | The user-facing question / request. Can be empty for non-Q&A flows. |
+| `answer` | string | ✓ | The model's response text. |
+| `context_chunks` | array | | Retrieved passages the response was meant to be grounded in. |
+| `citations` | array | | Sentence → chunk mapping. |
+| `tool_calls` | array | | Tool invocations the model made. |
+| `tool_results` | array | | Results returned by the tools. |
+| `domain` | enum | | Overrides the project's default domain for this request. |
+| `risk_level` | enum | | `low`, `medium`, `high`, `critical`. Informational — tags the trace. |
+| `mode` | enum | | Overrides the project's default mode (`detect`, `detect_and_rewrite`, `block_on_fail`). |
+| `response_schema` | object | | JSON Schema the answer must parse + validate against. |
+| `requested_checks` | string[] | | Limit to a subset of checks; omit to run all. |
+| `model_metadata` | object | | Passed through to the trace; useful for tagging (e.g. `{"model": "gpt-5-mini", "prompt_version": "v12"}`). |
+| `request_id` | string | | Your idempotency key; echoed back in the response. |
+
+### Chunk shape
+
+```json
+{
+  "id": "kb_1",
+  "text": "All refund requests must be submitted within 30 days.",
+  "score": 0.92,
+  "source_collection": "help-center",
+  "retriever": "vector",
+  "metadata": { "url": "https://help.example.com/refunds" }
+}
+```
+
+Only `id` and `text` are required. `score` lets BRAM compute retrieval-quality metrics.
+
+### Citation shape
+
+```json
+{
+  "sentence_index": 0,
+  "chunk_ids": ["kb_1", "kb_2"],
+  "text": "optional literal quote"
+}
+```
+
+Provide either `sentence_index` (0-based) or `text` (the exact quoted fragment from the answer).
+
+### Tool call + result shapes
+
+```json
+"tool_calls": [
+  {"id": "tc_1", "name": "get_order", "arguments": {"order_id": "o_42"}}
+],
+"tool_results": [
+  {"call_id": "tc_1", "name": "get_order", "payload": {...}}
+]
+```
+
+`payload` can be any JSON — BRAM flattens it to scalars and checks the answer against those scalars for tool-consistency.
+
+## Response body
+
+```json
+{
+  "verdict": "pass | warn | fail | human_review",
+  "overall_score": 0.15,
+  "deterministic_score": 0.08,
+  "ai_score": 0.05,
+  "unsupported_spans": [
+    {
+      "text": "60 days",
+      "start": 38,
+      "end": 45,
+      "reason": "Source says 30 days, answer says 60 days.",
+      "source": "ai_judge"
+    }
+  ],
+  "claim_results": [
+    {
+      "claim_text": "Refunds are available within 30 days.",
+      "sentence_index": 0,
+      "support_status": "supported",
+      "supporting_chunk_ids": ["kb_1"],
+      "conflicting_chunk_ids": [],
+      "severity": "low",
+      "reason_short": "Fully supported.",
+      "rewrite_recommended": false,
+      "safe_to_autocorrect": false,
+      "answer_level_verdict": "pass"
+    }
+  ],
+  "tool_consistency_results": [
+    {
+      "tool_name": "get_order",
+      "status": "pass",
+      "matched_paths": ["$.total", "$.status"],
+      "mismatches": []
+    }
+  ],
+  "citation_coverage": {
+    "supported": 3,
+    "total": 4,
+    "ratio": 0.75
+  },
+  "suggested_action": "allow",
+  "corrected_answer": "",
+  "trace_id": "trc_01HKB…",
+  "latency_ms": 187,
+  "estimated_cost_usd": 0.00032,
+  "audit_metadata": {
+    "deterministic_hard_fail": false,
+    "ai_eval_requested": true,
+    "ai_eval_run": true,
+    "retrieval_metrics": {...}
+  }
+}
+```
+
+### Verdict reference
+
+| Verdict | `suggested_action` | When |
+|---|---|---|
+| `pass` | `allow` | Overall score < `pass_threshold`, no critical findings |
+| `warn` | `warn` | Score ≥ `warn_threshold` OR any unsupported span |
+| `fail` | `block` (in `block_on_fail` mode) / `warn` elsewhere | Score ≥ `fail_threshold` OR critical deterministic finding |
+| `human_review` | `human_review` | Regulated domain + score ≥ `human_review_threshold` |
+
+## Status codes
+
+| HTTP | Meaning |
+|---|---|
+| `200 OK` | Check completed (regardless of verdict) |
+| `400 invalid_request` | Bad JSON / missing required field |
+| `401 unauthorized` | Runtime key invalid / revoked |
+| `403 forbidden` | Key lacks `evaluations:write` scope |
+| `422 validation_failed` | Schema violation (e.g. `response_schema` isn't valid JSON Schema) |
+| `429 rate_limited` | Per-key or per-project quota hit |
+| `500 internal_error` | Server-side bug; retry with backoff |
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -sS https://api.getbram.com/api/governor/v1/evals/check/ \
+  -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How do I reset my password?",
+    "answer": "Click the Forgot password link on the sign-in page.",
+    "context_chunks": [
+      {"id": "kb_5", "text": "Users can reset passwords from the Forgot password link."}
+    ],
+    "citations": [{"sentence_index": 0, "chunk_ids": ["kb_5"]}]
+  }'
+```
+
+```ts TypeScript
+const res = await fetch('https://api.getbram.com/api/governor/v1/evals/check/', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.BRAM_RUNTIME_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    query,
+    answer,
+    context_chunks: chunks,
+    mode: 'detect',
+  }),
+})
+const check = await res.json()
+```
+
+```python Python
+import httpx, os
+r = httpx.post(
+    "https://api.getbram.com/api/governor/v1/evals/check/",
+    headers={"Authorization": f"Bearer {os.environ['BRAM_RUNTIME_KEY']}"},
+    json={"query": query, "answer": answer, "context_chunks": chunks, "mode": "detect"},
+)
+check = r.json()
+```
+</CodeGroup>

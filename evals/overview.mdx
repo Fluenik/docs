@@ -1,0 +1,147 @@
+---
+title: Evals overview
+description: "Adversarial and behavioural evaluations across your governed agents — inline at runtime, or offline on datasets."
+---
+
+**BRAM Evals** is the judgment engine. Everything that decides *was this AI response good enough* flows through it:
+
+- A **runtime** check: call `/v1/evals/check` with a single request; get a verdict + findings back in under 500 ms
+- A **dataset** run: grade a fixed set of test cases to catch regressions before shipping
+- A **dashboard**: inspect verdicts, drill into claim-level findings, replay traces
+
+## How it works
+
+```
+               ┌──────────────────────────────────────────────┐
+               │             Governance Evals                 │
+               │                                              │
+Your request ─►│  1. Deterministic checks (regex, citations,  │
+               │     schema, scalars, tool-output match)      │
+               │                                              │
+               │  2. Nano pre-pass (cheap LLM → claims +      │
+               │     routing signal)                          │
+               │                                              │
+               │  3. AI judge (LLM-as-judge, gated by the     │
+               │     deterministic confidence band)           │
+               │                                              │
+               │  4. Policy decision (thresholds, domain)     │
+               │                                              │
+               └────────────────────┬─────────────────────────┘
+                                    ▼
+                           verdict + score + trace
+```
+
+Every check produces one of four verdicts: `pass`, `warn`, `fail`, or `human_review`.
+
+## Deterministic vs AI
+
+The engine runs **two kinds of checks** on every response, and combines them:
+
+<CardGroup cols={2}>
+  <Card title="Deterministic checks" icon="scale-balanced">
+    Regex, schema validation, citation matching, tool-output consistency, scalar exact-match, abstention detection.
+
+    **Cheap**, exhaustive, and repeatable. Same input → same answer, every time.
+
+    Owns: *did the answer hallucinate a number, a name, a date, or a tool field?*
+  </Card>
+  <Card title="AI judge" icon="sparkles">
+    LLM-as-judge faithfulness for each claim in the answer. Flags contradiction, partial support, or no support in evidence.
+
+    **Expensive**, semantic, nuanced.
+
+    Owns: *is the prose actually supported by the chunks, not just surface-matched?*
+  </Card>
+</CardGroup>
+
+### The confidence band
+
+The AI judge doesn't run on every request. It runs only when the deterministic score lands in an **ambiguous band** — not obviously clean, not obviously broken:
+
+```
+deterministic_confidence = 1.0 - deterministic_score
+
+run AI judge only when:
+  ai_eval_confidence_min ≤ deterministic_confidence ≤ ai_eval_confidence_max
+```
+
+Default band: `0.25 – 0.70`. Below → deterministic already flagged enough; skip. Above → deterministic says clean; skip. Cost scales with ambiguity, not with traffic.
+
+## Request shape
+
+Every `/v1/evals/check` call is:
+
+```json
+{
+  "query": "Can I get a refund after 30 days?",
+  "answer": "Yes, refunds are available within 60 days.",
+  "context_chunks": [
+    {"id": "kb_1", "text": "All refund requests must be submitted within 30 days of purchase."}
+  ],
+  "citations": [
+    {"sentence_index": 0, "chunk_ids": ["kb_1"]}
+  ],
+  "tool_calls": [],
+  "tool_results": [],
+  "domain": "customer_support",
+  "risk_level": "medium",
+  "mode": "detect"
+}
+```
+
+Only `query` and `answer` are required. Everything else is optional — but the more you provide, the more checks BRAM can run.
+
+## Response shape
+
+```json
+{
+  "verdict": "fail",
+  "overall_score": 0.62,
+  "deterministic_score": 0.45,
+  "ai_score": 0.38,
+  "unsupported_spans": [
+    {
+      "text": "60 days",
+      "start": 38,
+      "end": 45,
+      "reason": "No citation covered this factual sentence."
+    }
+  ],
+  "claim_results": [
+    {
+      "claim_text": "Yes, refunds are available within 60 days.",
+      "support_status": "contradicted",
+      "reason_short": "Source says 30 days, answer says 60 days."
+    }
+  ],
+  "suggested_action": "block",
+  "trace_id": "trc_01HKB…"
+}
+```
+
+## Three ways to use it
+
+<CardGroup cols={3}>
+  <Card title="Inline (detect)" icon="magnifying-glass">
+    Call at response time, log findings, **don't** modify output. Safe default. Perfect for the first week of production.
+  </Card>
+  <Card title="Inline (rewrite)" icon="pen">
+    Call at response time; when a safe grounded rewrite is available, return the rewrite instead. Reduces hallucination rate without blocking.
+  </Card>
+  <Card title="Inline (block)" icon="hand">
+    Call at response time; when the verdict is `fail`, return an error. Use for **high-stakes** workflows — finance, medical, legal.
+  </Card>
+</CardGroup>
+
+Plus offline: [datasets](/evals/datasets) for regression testing before each release.
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/evals/quickstart">
+    Create a project, issue a key, send your first check.
+  </Card>
+  <Card title="API reference" icon="terminal" href="/api-reference/evals/check">
+    The full `/v1/evals/check` contract.
+  </Card>
+</CardGroup>

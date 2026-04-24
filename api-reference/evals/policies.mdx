@@ -1,0 +1,68 @@
+---
+title: "Policies"
+description: "Create, list, update, and delete eval policies."
+---
+
+Auth: **API key** (`Authorization: Bearer bak_…`).
+
+See [Governance → Policies](/governance/policies) for a field-by-field schema reference. This page covers the REST surface.
+
+## List policies
+
+```http
+GET /api/governor/v1/evals/policies/
+GET /api/governor/v1/evals/policies/?project_id=42
+```
+
+Returns workspace defaults + any project-scoped policies. Filter by `project_id` to narrow.
+
+## Create a policy
+
+```http
+POST /api/governor/v1/evals/policies/
+```
+
+Body (minimum):
+```json
+{
+  "name": "Support groundedness",
+  "slug": "support_groundedness",
+  "project_id": 42,
+  "domain": "customer_support",
+  "risk_level": "medium",
+  "default_mode": "detect",
+  "pass_threshold": 0.20,
+  "warn_threshold": 0.42,
+  "fail_threshold": 0.65,
+  "human_review_threshold": 0.55,
+  "enable_ai_judge": true,
+  "is_active": true
+}
+```
+
+Any fields you omit fall back to domain defaults (see [Governance → Overview](/governance/overview#domain-aware-thresholds)).
+
+## Update + delete
+
+```http
+PATCH /api/governor/v1/evals/policies/{id}/
+DELETE /api/governor/v1/evals/policies/{id}/
+```
+
+`PATCH` is partial — send only the fields you want to change. Every `PATCH` creates a new version; you can roll back from the dashboard.
+
+## Canary rollout
+
+```http
+POST /api/governor/v1/evals/policies/{id}/rollout/
+```
+
+Body:
+```json
+{
+  "version": 5,
+  "canary_percent": 10
+}
+```
+
+Routes N% of traffic through the new version; leave the rest on the previous one. Raise `canary_percent` gradually, or revert by posting the previous version with `canary_percent: 0`.

@@ -1,0 +1,61 @@
+---
+title: Introduction
+description: "BRAM is the AI trust platform — govern, observe, and evaluate every model, agent, and tool call."
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.png"
+  alt="BRAM hero"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="BRAM hero"
+/>
+
+BRAM sits between your AI agents and the rest of your stack. It gives product, engineering, and compliance teams one place to:
+
+- **Govern** — define policies that apply at prompt, response, and tool-call boundaries, and enforce them in real time.
+- **Observe** — capture every AI interaction (queries, answers, tool calls, retrievals) with full context and audit-grade logging.
+- **Evaluate** — run adversarial and behavioural evaluations across your agents, from one-off runtime checks to dataset-driven regressions.
+
+## The three surfaces
+
+<CardGroup cols={3}>
+  <Card title="BRAM MCP" icon="plug" href="/mcp/overview">
+    A local MCP gateway that proxies agent tool calls through your policies and surfaces native OS approval prompts for anything risky.
+  </Card>
+  <Card title="Governance" icon="shield-check" href="/governance/overview">
+    The policy layer. Define rules once, apply them across every model / agent / tool, and review every decision in the audit log.
+  </Card>
+  <Card title="Evals" icon="chart-line" href="/evals/overview">
+    Adversarial + behavioural evaluations. Hit our runtime `/v1/evals/check` endpoint inline, or run datasets offline.
+  </Card>
+</CardGroup>
+
+## Who BRAM is for
+
+<CardGroup cols={2}>
+  <Card title="Product + engineering" icon="code">
+    Ship AI features without having to build policy enforcement, audit logging, and eval pipelines yourself.
+  </Card>
+  <Card title="Compliance + security" icon="scale-balanced">
+    Demonstrate SOC 2 / GDPR / HIPAA / internal AI governance with signed audit logs and policy decision trails.
+  </Card>
+</CardGroup>
+
+## How it's different
+
+BRAM is **framework-agnostic** and **model-agnostic**. If your agent speaks MCP, BRAM can govern it. If your application calls an LLM, it can call our Evals API. You keep the model provider you already use (Anthropic, OpenAI, Azure OpenAI, AWS Bedrock, open-source) — BRAM is the governance layer on top.
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Create a workspace, issue a runtime key, and ship your first policy in five minutes.
+  </Card>
+  <Card title="API reference" icon="terminal" href="/api-reference/authentication">
+    Every endpoint, every field, with copy-paste examples.
+  </Card>
+</CardGroup>

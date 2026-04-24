@@ -1,0 +1,236 @@
+---
+title: Runtime API
+description: "The /v1/evals/check endpoint — inline checks at response time."
+---
+
+`POST /api/governor/v1/evals/check/` is the single endpoint you'll hit most. It grades one answer against the policy attached to the request's project and returns a verdict + full findings in under 500 ms (p95 under 200 ms when the AI judge doesn't run).
+
+Auth is a **runtime key** issued in your project's **Keys** tab:
+
+```bash
+curl https://api.getbram.com/api/governor/v1/evals/check/ \
+  -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+  -H "Content-Type: application/json" \
+  -d @request.json
+```
+
+See [API reference → /v1/evals/check](/api-reference/evals/check) for the full contract. This page walks through **what to feed it** and **how to interpret what comes back**.
+
+## Minimum request
+
+```json
+{
+  "query": "How do I reset my password?",
+  "answer": "Click the Forgot password link on the sign-in page."
+}
+```
+
+With no `context_chunks`, BRAM can only grade:
+
+- Schema validity (if you provide `response_schema`)
+- Abstention (does the answer say "I don't know" when it has no evidence?)
+- Pattern anomalies (obviously hallucinated numbers, dates, emails)
+
+You'll get a verdict, but it won't be as sharp as it could be.
+
+## Feeding it evidence
+
+Every additional field unlocks more checks:
+
+<Accordion title="context_chunks — the retrieved sources">
+  ```json
+  "context_chunks": [
+    {
+      "id": "kb_5",
+      "text": "Users can reset passwords from the Forgot password link on the sign-in page.",
+      "score": 0.92,
+      "source_collection": "help-center",
+      "metadata": {"url": "https://help.example.com/reset", "updated_at": "2026-03-12"}
+    }
+  ]
+  ```
+
+  Pass every chunk your retriever returned. BRAM uses these for:
+  - Citation coverage (which factual sentences cite which chunks?)
+  - Source existence (do citations reference chunks that actually exist?)
+  - Retrieval sufficiency (are there enough high-quality chunks?)
+  - Named-entity consistency (do entities in the answer appear in evidence?)
+  - Exact-match checks (do numbers in the answer appear in the evidence?)
+</Accordion>
+
+<Accordion title="citations — which chunks support which sentences">
+  ```json
+  "citations": [
+    {"sentence_index": 0, "chunk_ids": ["kb_5"]},
+    {"sentence_index": 1, "chunk_ids": ["kb_5", "kb_12"]}
+  ]
+  ```
+
+  Optional but highly recommended. Without explicit citations, BRAM will still try to match sentences to chunks heuristically, but you get tighter scoring when the mapping is explicit.
+</Accordion>
+
+<Accordion title="tool_calls + tool_results — for tool-using agents">
+  ```json
+  "tool_calls": [
+    {"id": "tc_1", "name": "get_order", "arguments": {"order_id": "o_42"}}
+  ],
+  "tool_results": [
+    {
+      "call_id": "tc_1",
+      "name": "get_order",
+      "payload": {"id": "o_42", "total": 129.99, "status": "shipped", "date": "2026-04-20"}
+    }
+  ]
+  ```
+
+  BRAM uses these to enforce **tool consistency** — scalars like `total`, `status`, `date` in the answer must match the tool output. If the model says "Your order totals $149.99" but the tool returned `$129.99`, that's a critical finding.
+</Accordion>
+
+<Accordion title="response_schema — for structured JSON outputs">
+  ```json
+  "response_schema": {
+    "type": "object",
+    "required": ["order_id", "status"],
+    "properties": {
+      "order_id": {"type": "string"},
+      "status": {"enum": ["shipped", "delivered", "cancelled"]}
+    }
+  }
+  ```
+
+  When provided, BRAM validates the answer parses as JSON and matches the schema. Schema errors are **critical** (hard fail).
+</Accordion>
+
+<Accordion title="domain + risk_level + mode — per-request overrides">
+  ```json
+  "domain": "finance",
+  "risk_level": "high",
+  "mode": "block_on_fail"
+  ```
+
+  These override the policy's defaults for this single request. Useful when one project serves multiple traffic types and the policy's default isn't right for every request.
+</Accordion>
+
+## Reading the response
+
+```json
+{
+  "verdict": "fail",
+  "overall_score": 0.72,
+  "deterministic_score": 0.65,
+  "ai_score": 0.55,
+  "unsupported_spans": [
+    {
+      "text": "60 days",
+      "start": 38,
+      "end": 45,
+      "reason": "Source says 30 days; answer says 60 days.",
+      "source": "ai_judge"
+    }
+  ],
+  "claim_results": [
+    {
+      "claim_text": "Yes, refunds are available within 60 days.",
+      "support_status": "contradicted",
+      "supporting_chunk_ids": [],
+      "conflicting_chunk_ids": ["kb_1"],
+      "severity": "high",
+      "reason_short": "Source says 30 days, answer says 60 days.",
+      "rewrite_recommended": true,
+      "safe_to_autocorrect": true
+    }
+  ],
+  "citation_coverage": {"supported": 0, "total": 1, "ratio": 0.0},
+  "tool_consistency_results": [],
+  "suggested_action": "block",
+  "corrected_answer": "Refunds are available within 30 days of purchase.",
+  "trace_id": "trc_01HKB…"
+}
+```
+
+Field-by-field:
+
+| Field | Meaning |
+|---|---|
+| `verdict` | `pass`, `warn`, `fail`, `human_review` |
+| `overall_score` | 0 = clean, 1 = maximum risk |
+| `deterministic_score` / `ai_score` | Split so you can see which layer flagged what |
+| `unsupported_spans` | Highlighted regions of the answer that failed grounding — includes character offsets for rendering |
+| `claim_results` | One entry per atomic claim; see `support_status` |
+| `citation_coverage` | `ratio` = % of factual sentences that mapped to a citation |
+| `tool_consistency_results` | Per-tool match status (scalars that matched, scalars that mismatched) |
+| `suggested_action` | Your cue: `allow`, `warn`, `block`, `rewrite`, `human_review` |
+| `corrected_answer` | Present only when `detect_and_rewrite` mode produced a safe rewrite |
+| `trace_id` | Canonical ID to open the trace in the dashboard |
+
+### Claim support statuses
+
+| Status | Meaning |
+|---|---|
+| `supported` | Evidence clearly supports the claim |
+| `partially_supported` | Some evidence, but incomplete |
+| `not_found` | No evidence either way |
+| `contradicted` | Evidence directly contradicts the claim (the dangerous one) |
+
+## Handling verdicts in your app
+
+```ts
+if (check.verdict === 'fail') {
+  // serve a safe fallback, surface the trace_id to the user for support
+  return { text: "I'm not able to answer that right now.", trace: check.trace_id }
+}
+
+if (check.verdict === 'human_review') {
+  // route to human-review queue, serve an interim response
+  await queueForReview(check.trace_id)
+  return { text: "Let me escalate this to our team — we'll follow up shortly." }
+}
+
+if (check.corrected_answer) {
+  // detect_and_rewrite produced a safe correction
+  return { text: check.corrected_answer, trace: check.trace_id }
+}
+
+if (check.verdict === 'warn') {
+  // log + ship; consider flagging in your UI
+  logger.warn({ trace: check.trace_id, spans: check.unsupported_spans })
+}
+
+return { text: originalAnswer, trace: check.trace_id }
+```
+
+## Performance
+
+| Scenario | p50 | p95 |
+|---|---:|---:|
+| Deterministic-only (no AI judge) | 40 ms | 120 ms |
+| With nano pre-pass | 180 ms | 350 ms |
+| With full AI judge | 800 ms | 1800 ms |
+
+The confidence band keeps the full judge off ~55% of traffic. Budget ~150 ms p95 in the common case if you tune the band to your workload.
+
+## Batch mode
+
+For bulk scoring (e.g. re-grading historical traces after a policy change):
+
+```bash
+curl https://api.getbram.com/api/governor/v1/evals/check/batch/ \
+  -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"requests": [ {...}, {...}, {...} ]}'
+```
+
+Batch mode is rate-limited separately from single-check mode. See [batch API reference](/api-reference/evals/batch).
+
+## Quotas
+
+Each project has two monthly quotas:
+
+- `monthly_check_limit` — total calls to `/v1/evals/check` this month
+- `monthly_ai_check_limit` — subset where the AI judge ran (gated by the confidence band)
+
+When a quota is hit, further calls return `429 Too Many Requests` with a `x-bram-quota-reset` header. Set the quotas per-project in the project modal; they reset on the 1st of each month UTC.
+
+<Card title="Next: offline datasets" icon="arrow-right" href="/evals/datasets">
+  Regression-test every release against a fixed corpus.
+</Card>

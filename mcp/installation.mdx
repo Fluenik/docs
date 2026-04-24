@@ -1,0 +1,106 @@
+---
+title: Install BRAM Desktop
+description: "Install the local MCP gateway on macOS, Windows, or Linux."
+---
+
+BRAM Desktop is a small native app that runs in your system tray. It boots an MCP gateway on `127.0.0.1` that any MCP client can connect to.
+
+## System requirements
+
+- **macOS** 13 (Ventura) or later — Apple Silicon and Intel
+- **Windows** 10 / 11 — x86_64 and ARM64
+- **Linux** — Ubuntu 22.04+, Fedora 38+, Debian 12+ (x86_64 and aarch64)
+- ~80 MB disk, ~50 MB RAM at idle
+
+## Install
+
+<Tabs>
+  <Tab title="macOS">
+    **Homebrew (recommended):**
+
+    ```bash
+    brew install bram-ai/tap/bram-desktop
+    ```
+
+    **Or download the signed `.dmg`:**
+
+    [macOS Apple Silicon (.dmg)](https://getbram.com/download/mac-arm64) · [macOS Intel (.dmg)](https://getbram.com/download/mac-intel)
+
+    <Note>
+      Drag **BRAM.app** into `Applications`. The first launch will prompt for Accessibility permission — BRAM uses it only to show native approval modals and read nothing else.
+    </Note>
+  </Tab>
+  <Tab title="Windows">
+    **winget (recommended):**
+
+    ```powershell
+    winget install bram.bram-desktop
+    ```
+
+    **Or download the signed installer:**
+
+    [Windows x64 (.msi)](https://getbram.com/download/win-x64) · [Windows ARM64 (.msi)](https://getbram.com/download/win-arm64)
+  </Tab>
+  <Tab title="Linux">
+    **Shell install (detects your distro):**
+
+    ```bash
+    curl -fsSL https://getbram.com/install.sh | sh
+    ```
+
+    **Or grab a package directly:**
+
+    [.deb (Debian / Ubuntu)](https://getbram.com/download/linux-deb) · [.rpm (Fedora / RHEL)](https://getbram.com/download/linux-rpm) · [AppImage](https://getbram.com/download/linux-appimage)
+
+    The shell installer drops a `bram` binary into `~/.local/bin/` and registers a user-level systemd unit to auto-start the daemon on login.
+  </Tab>
+</Tabs>
+
+## First launch
+
+On first launch BRAM will:
+
+1. Start the daemon at `http://127.0.0.1:6272`
+2. Register the MCP endpoint at `http://127.0.0.1:6272/mcp`
+3. Write a default policy to `~/.bram/policy.yaml` (see [Writing policies](/mcp/policies))
+4. Show a tray icon — click it to open the approval inbox and audit log
+
+## Verify it's running
+
+```bash
+curl -fsS http://127.0.0.1:6272/health
+```
+
+Expected output:
+
+```json
+{
+  "status": "ok",
+  "daemon_version": "1.0.0",
+  "mcp_endpoint": "http://127.0.0.1:6272/mcp",
+  "policy_path": "~/.bram/policy.yaml"
+}
+```
+
+## Sign in (optional)
+
+Signing in with your [app.getbram.com](https://app.getbram.com) account is optional. Without it, BRAM Desktop works fully offline — local policy, local audit log, no telemetry.
+
+When you sign in, BRAM will:
+
+- Pull your workspace's shared policies (if any)
+- Stream the audit log upstream (hashed tool args, never full payloads unless you explicitly opt in)
+- Unlock team features (shared approvals, cross-device history)
+
+```bash
+bram auth login
+# Opens a browser for OAuth, writes the token to ~/.bram/session
+```
+
+## Upgrading
+
+BRAM checks for updates hourly and downloads them in the background. A tray-menu badge appears when an update is staged; click **Restart to update** to apply.
+
+<Card title="Next: connect your first agent" icon="arrow-right" href="/mcp/agents">
+  Point Claude Desktop, Cursor, or Cline at the BRAM gateway.
+</Card>

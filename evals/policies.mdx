@@ -1,0 +1,106 @@
+---
+title: Eval policies
+description: "Tune how checks behave per project — thresholds, AI judge routing, rewrite rules."
+---
+
+Each eval project has a **policy** that controls how `/v1/evals/check` behaves. One project can have at most one active policy; when no policy is set, a workspace default is used.
+
+The policy schema is shared with the governance layer — see [Governance → Policies](/governance/policies) for the complete field reference. This page focuses on the fields that matter most for evals specifically.
+
+## The knobs that matter
+
+| Field | Default | When to tune |
+|---|---|---|
+| `default_mode` | `detect` | Start here; move to `detect_and_rewrite` or `block_on_fail` once you trust verdicts. |
+| `pass_threshold` | domain-specific | Lower → fewer `pass` verdicts; raise to be more lenient. |
+| `warn_threshold` | domain-specific | Gap between pass and fail — how much "yellow zone" you want. |
+| `fail_threshold` | domain-specific | Your error budget. Raise in early days; tighten as accuracy improves. |
+| `enable_ai_judge` | `true` | Turn off to run deterministic-only (cheaper, less nuanced). |
+| `ai_eval_confidence_min/max` | `0.25 / 0.70` | Narrow the band to reduce AI cost; widen to catch more ambiguous cases. |
+| `allow_auto_rewrite` | `false` | Enable when you're in `detect_and_rewrite` mode and want the engine to fix unsupported spans. |
+
+## Domain defaults
+
+When you create a project, pick the domain that matches your traffic. Each domain has different threshold defaults:
+
+| Domain | Pass | Warn | Fail | Human review |
+|---|---:|---:|---:|---:|
+| `low_risk_marketing` | 0.22 | 0.45 | 0.70 | 0.60 |
+| `generic` | 0.20 | 0.45 | 0.68 | 0.58 |
+| `customer_support` | 0.20 | 0.42 | 0.65 | 0.55 |
+| `internal_ops` | 0.18 | 0.40 | 0.62 | 0.50 |
+| `finance` | 0.12 | 0.28 | 0.45 | 0.35 |
+| `medical` | 0.10 | 0.24 | 0.42 | 0.30 |
+| `legal` | 0.10 | 0.24 | 0.42 | 0.30 |
+
+Regulated domains (finance / medical / legal) route to `human_review` when the overall score crosses the review threshold — even if it's below the fail threshold.
+
+## Threshold presets
+
+In the dashboard's policy modal, use the **Presets** dropdown to get started:
+
+- **Strict** — `0.10 / 0.25 / 0.45 / 0.35`. For regulated, high-stakes flows.
+- **Balanced** — `0.20 / 0.45 / 0.65 / 0.55`. Sensible default for consumer chatbots.
+- **Lenient** — `0.30 / 0.55 / 0.75 / 0.65`. For creative / marketing / brainstorming flows where strict grounding isn't the goal.
+
+## The AI judge confidence band
+
+The two fields that matter most for cost:
+
+- `ai_eval_confidence_min` — below this, deterministic already flagged enough; skip the judge
+- `ai_eval_confidence_max` — above this, deterministic says clean; skip the judge
+
+Default band: **0.25 – 0.70**. That means the AI judge runs on roughly the middle 45% of ambiguous traffic. Narrow the band (e.g. 0.35 – 0.60) to cut AI cost; widen it (e.g. 0.15 – 0.85) to catch more edge cases.
+
+```json
+{
+  "enable_ai_judge": true,
+  "ai_eval_confidence_min": 0.35,
+  "ai_eval_confidence_max": 0.60
+}
+```
+
+## Rewrite rules
+
+In `detect_and_rewrite` mode, the engine can return a corrected answer:
+
+```json
+{
+  "default_mode": "detect_and_rewrite",
+  "allow_auto_rewrite": true
+}
+```
+
+When set, for every answer whose claims are flagged with `rewrite_recommended: true` and `safe_to_autocorrect: true`, the engine runs a rewrite pass and returns the corrected text in `corrected_answer`. The original answer is still returned for comparison; your app chooses which to serve.
+
+<Warning>
+  Rewrites only trigger when the engine has high confidence in the correction. Flagged claims that change meaning or introduce new assertions are never auto-rewritten.
+</Warning>
+
+## Project-scoped vs workspace-default
+
+- **Project-scoped policy** — applies only to checks for a single project. Create via the policy modal with a `project_id`.
+- **Workspace-default policy** — applies to every project that doesn't have its own. Create with `project_id: null`.
+
+When both exist, project-scoped wins.
+
+## Versioning + canary rollout
+
+Every policy edit creates a new version. In the dashboard:
+
+- **Canary rollout** — route N% of traffic through the new version; leave the rest on the old
+- **Diff** — side-by-side with the previous version
+- **Rollback** — single click
+
+```bash
+# Roll 10% of traffic to the new version
+curl -X POST https://api.getbram.com/api/governor/v1/evals/policies/17/rollout/ \
+  -H "Authorization: Bearer $BRAM_API_KEY" \
+  -d '{"version": 5, "canary_percent": 10}'
+```
+
+Version activity shows up live on the **Overview** tab so you can watch verdict distribution shift before committing.
+
+<Card title="Next: the runtime API" icon="arrow-right" href="/evals/runtime">
+  Every field in `/v1/evals/check` — and how to feed it good data.
+</Card>

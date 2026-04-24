@@ -1,0 +1,214 @@
+---
+title: Webhooks
+description: "Real-time notifications when evals are created, updated, or complete — wired to your alerting, CI, or custom dashboards."
+---
+
+Webhooks push events from BRAM to any HTTPS endpoint. Use them to:
+
+- Alert on-call when the live pass rate drops
+- Trigger CI to retrain / rebuild when a regression suite fails
+- Sync traces into your own analytics warehouse
+- Post policy-decision summaries to Slack / Teams
+
+## Events
+
+| Event | When it fires |
+|---|---|
+| `eval.created` | A new eval run starts |
+| `eval.completed` | An eval run finishes (success or failure) |
+| `eval.failed` | An eval run errored |
+| `trace.fail_rate_threshold` | A project's fail-rate crosses the alert threshold |
+| `trace.warn_rate_threshold` | A project's warn-rate crosses the alert threshold |
+| `threshold.breached` | Any policy threshold was breached in a specific check |
+
+## Create a webhook
+
+<Tabs>
+  <Tab title="Dashboard">
+    **Evals → Webhooks → + New webhook**:
+
+    1. Name + target URL
+    2. Pick event types (multi-select)
+    3. Optional: sign with a shared secret for HMAC verification
+    4. Optional: scope to a single project
+
+    BRAM sends a test request to the URL after save to confirm it's reachable. If that fails, the webhook is created in a "paused" state.
+  </Tab>
+  <Tab title="API">
+    ```bash
+    curl -X POST https://api.getbram.com/api/governor/v1/evals/webhooks/ \
+      -H "Authorization: Bearer $BRAM_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Ops alerts",
+        "project_id": 42,
+        "target_url": "https://hooks.example.com/governance-evals",
+        "signing_secret": "whsec_…",
+        "event_types": ["eval.completed", "trace.fail_rate_threshold"],
+        "is_active": true
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Delivery payload
+
+Every event is a POST to your URL with this envelope:
+
+```json
+{
+  "id": "evt_01HK…",
+  "type": "eval.completed",
+  "created_at": "2026-04-23T18:42:12.091Z",
+  "workspace_id": "ws_acme",
+  "project_id": 42,
+  "data": {
+    "eval_run_id": 17,
+    "status": "completed",
+    "total_items": 200,
+    "summary_metrics": {
+      "governance_eval_pass_rate": 0.915,
+      "false_positive_rate": 0.02,
+      "verdict_counts": {"pass": 183, "warn": 12, "fail": 4, "human_review": 1}
+    }
+  }
+}
+```
+
+Headers on every delivery:
+
+| Header | Meaning |
+|---|---|
+| `X-BRAM-Event` | Event type (e.g. `eval.completed`) |
+| `X-BRAM-Delivery-Id` | Unique delivery attempt ID |
+| `X-BRAM-Signature` | `sha256=<hex>` HMAC of the raw body using your signing secret |
+| `X-BRAM-Timestamp` | Unix timestamp (seconds) — use to reject replays |
+
+## Verifying signatures
+
+Always verify the signature before trusting a payload:
+
+<CodeGroup>
+```ts TypeScript
+import crypto from 'node:crypto'
+
+export function verify(req: Request, secret: string) {
+  const signature = req.headers.get('x-bram-signature') ?? ''
+  const timestamp = req.headers.get('x-bram-timestamp') ?? ''
+  const body = req.body  // raw body string
+
+  // Reject anything older than 5 minutes — guards against replay.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+    return false
+  }
+
+  const mac = crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${body}`)
+    .digest('hex')
+
+  return crypto.timingSafeEqual(
+    Buffer.from(`sha256=${mac}`),
+    Buffer.from(signature),
+  )
+}
+```
+
+```python Python
+import hmac, hashlib, time
+
+def verify(headers, raw_body, secret):
+    signature = headers.get("X-BRAM-Signature", "")
+    timestamp = headers.get("X-BRAM-Timestamp", "0")
+
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+
+    mac = hmac.new(
+        secret.encode(),
+        f"{timestamp}.{raw_body}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(f"sha256={mac}", signature)
+```
+
+```go Go
+func verify(headers http.Header, rawBody []byte, secret string) bool {
+    signature := headers.Get("X-BRAM-Signature")
+    timestamp := headers.Get("X-BRAM-Timestamp")
+
+    ts, err := strconv.ParseInt(timestamp, 10, 64)
+    if err != nil || math.Abs(float64(time.Now().Unix()-ts)) > 300 {
+        return false
+    }
+
+    mac := hmac.New(sha256.New, []byte(secret))
+    mac.Write([]byte(fmt.Sprintf("%s.%s", timestamp, rawBody)))
+    expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+    return hmac.Equal([]byte(expected), []byte(signature))
+}
+```
+</CodeGroup>
+
+## Retries
+
+Deliveries that return non-2xx are retried with exponential backoff:
+
+| Attempt | Delay |
+|---|---:|
+| 1 | immediate |
+| 2 | 30 s |
+| 3 | 5 min |
+| 4 | 30 min |
+| 5 | 2 h |
+| 6 | 6 h (final) |
+
+After 6 attempts, the delivery is marked failed and your webhook's `last_status` shows `failed`. You can replay any delivery from the **Webhooks → Deliveries** detail view.
+
+<Note>
+  If your endpoint returns 2xx but the body indicates failure, BRAM doesn't know — it only looks at HTTP status. Use 5xx to trigger retries.
+</Note>
+
+## Testing + replay
+
+<Steps>
+  <Step title="Fire a test delivery">
+    From the dashboard, every webhook row has a **▶ Test** button that sends a synthetic payload immediately.
+  </Step>
+  <Step title="Replay a real delivery">
+    Open the webhook's **Deliveries** tab, pick a delivery, click **Replay**. Uses the exact original body + signature.
+  </Step>
+  <Step title="Inspect recent deliveries">
+    Each webhook keeps its last 100 deliveries with full request + response so you can diagnose 5xxs.
+  </Step>
+</Steps>
+
+## Event-specific payloads
+
+### `eval.completed`
+```json
+{"type": "eval.completed", "data": {
+  "eval_run_id": 17, "status": "completed", "total_items": 200,
+  "summary_metrics": { "governance_eval_pass_rate": 0.915, ... }
+}}
+```
+
+### `trace.fail_rate_threshold`
+```json
+{"type": "trace.fail_rate_threshold", "data": {
+  "project_id": 42, "window_minutes": 15,
+  "current_fail_rate": 0.22, "threshold": 0.15,
+  "sample_trace_ids": ["trc_01HKB…", "trc_01HKC…"]
+}}
+```
+
+### `threshold.breached`
+```json
+{"type": "threshold.breached", "data": {
+  "trace_id": "trc_01HKB…", "project_id": 42, "policy_id": 17,
+  "verdict": "fail", "overall_score": 0.72,
+  "suggested_action": "block"
+}}
+```

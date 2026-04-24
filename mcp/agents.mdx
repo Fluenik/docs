@@ -1,0 +1,125 @@
+---
+title: Connect your agent
+description: "Point Claude Desktop, Cursor, Cline, or any MCP-compatible client at the BRAM gateway."
+---
+
+BRAM Desktop exposes a standard MCP endpoint at `http://127.0.0.1:6272/mcp`. Any client that speaks MCP can connect to it, and the gateway will transparently proxy calls to the MCP servers you've configured upstream.
+
+The pattern is the same for every agent: **replace the MCP server URL in your client config with BRAM's URL**, and add your upstream MCP servers to BRAM instead.
+
+## Claude Desktop
+
+Edit your Claude config file:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+Replace any `mcpServers` entries with a single BRAM entry:
+
+```json
+{
+  "mcpServers": {
+    "bram": {
+      "command": "bram",
+      "args": ["mcp", "stdio"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Claude now talks to BRAM; BRAM talks to your upstream MCP servers.
+
+<Note>
+  `bram mcp stdio` launches a stdio-bridge on demand and connects to the running daemon. If you'd rather use HTTP directly, Claude Desktop 0.9+ supports HTTP MCP servers — point it at `http://127.0.0.1:6272/mcp` the same way.
+</Note>
+
+## Cursor
+
+Open **Cursor Settings → MCP → + Add new MCP Server**:
+
+```json
+{
+  "mcpServers": {
+    "bram": {
+      "url": "http://127.0.0.1:6272/mcp"
+    }
+  }
+}
+```
+
+Save. Cursor's composer will now route every tool call through BRAM.
+
+## Cline (VS Code)
+
+Open the Cline settings JSON (Command Palette → **Cline: Open MCP Settings**):
+
+```json
+{
+  "mcpServers": {
+    "bram": {
+      "type": "http",
+      "url": "http://127.0.0.1:6272/mcp"
+    }
+  }
+}
+```
+
+## Custom MCP clients
+
+The endpoint implements the standard [MCP HTTP transport](https://modelcontextprotocol.io/docs/concepts/transports). Any compliant client works:
+
+```ts
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+
+const client = new Client({ name: 'my-agent', version: '1.0.0' }, { capabilities: {} })
+await client.connect(
+  new StreamableHTTPClientTransport(new URL('http://127.0.0.1:6272/mcp')),
+)
+```
+
+## Configure upstream MCP servers
+
+BRAM doesn't replace your MCP servers — it proxies them. Register each upstream server in BRAM once, and every connected agent sees the same toolset.
+
+Edit `~/.bram/config.yaml`:
+
+```yaml
+mcp_servers:
+  filesystem:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/kyle/projects"]
+
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+
+  slack:
+    url: "http://127.0.0.1:3001/mcp"
+    headers:
+      Authorization: "Bearer ${SLACK_MCP_TOKEN}"
+```
+
+Or use the tray menu: **BRAM → Settings → MCP Servers → Add**.
+
+BRAM hot-reloads the config on save. Your agent doesn't need to reconnect.
+
+## What your agent sees
+
+The gateway exposes the **union** of all registered servers' tools, namespaced by server:
+
+```
+filesystem.read_file
+filesystem.write_file
+github.create_issue
+github.search_repositories
+slack.post_message
+```
+
+Tool calls go through the policy engine before being forwarded upstream. The response (success, error, or policy denial) is streamed back to the agent as a standard MCP tool result.
+
+<Card title="Next: write your first policy" icon="arrow-right" href="/mcp/policies">
+  Block critical tool calls, require approval for risky ones, and auto-approve the safe stuff.
+</Card>

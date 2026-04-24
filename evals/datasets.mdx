@@ -1,0 +1,210 @@
+---
+title: Datasets
+description: "Offline regression tests — pin a fixed corpus, grade it with every release, and ship with confidence."
+---
+
+Runtime checks grade one answer at a time. **Datasets** grade hundreds or thousands of fixed test cases at once, against a specific policy version. Use them to:
+
+- Regression-test every release before it hits production
+- A/B compare two policy versions without risking real traffic
+- Quantify the impact of a prompt change, a retrieval change, or a model change
+- Build a library of "golden" failure cases to prevent backsliding
+
+## Dataset structure
+
+A dataset is a JSON array of items. Each item is a full eval request plus an **expected verdict**:
+
+```json
+[
+  {
+    "label": "Refund policy — correct",
+    "expected_verdict": "pass",
+    "severity": "medium",
+    "payload": {
+      "query": "Can I get a refund after 30 days?",
+      "answer": "Refunds are available within 30 days of purchase.",
+      "context_chunks": [
+        {"id": "kb_1", "text": "All refund requests must be submitted within 30 days of purchase."}
+      ],
+      "citations": [{"sentence_index": 0, "chunk_ids": ["kb_1"]}]
+    }
+  },
+  {
+    "label": "Refund policy — hallucination",
+    "expected_verdict": "fail",
+    "severity": "high",
+    "payload": {
+      "query": "Can I get a refund after 30 days?",
+      "answer": "Yes, refunds are available within 60 days.",
+      "context_chunks": [
+        {"id": "kb_1", "text": "All refund requests must be submitted within 30 days of purchase."}
+      ]
+    }
+  }
+]
+```
+
+Every item's `payload` is a normal `/v1/evals/check` request. The evaluator runs it through the policy and compares the returned verdict to `expected_verdict`.
+
+## Create a dataset
+
+<Tabs>
+  <Tab title="Dashboard">
+    **Evals → Datasets → + New dataset**:
+
+    1. Name + description
+    2. Bind to a project
+    3. Paste JSON into the items editor (or upload a file)
+
+    Changes save atomically.
+  </Tab>
+  <Tab title="API">
+    ```bash
+    curl -X POST https://api.getbram.com/api/governor/v1/evals/datasets/ \
+      -H "Authorization: Bearer $BRAM_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Refund policy regression",
+        "project_id": 42,
+        "description": "All refund-related support cases — 200 examples",
+        "items": [ ... ]
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Run an eval
+
+Runs grade the dataset against a policy. You can run against the project's current policy or pin to a specific version.
+
+<Tabs>
+  <Tab title="Dashboard">
+    **Datasets → Run eval** → pick a dataset, pick a policy, pick a mode. Results stream in as items complete.
+  </Tab>
+  <Tab title="API">
+    ```bash
+    curl -X POST https://api.getbram.com/api/governor/v1/evals/runs/start/ \
+      -H "Authorization: Bearer $BRAM_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "project_id": 42,
+        "dataset_id": 7,
+        "policy_id": 17,
+        "mode": "detect"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Run metrics
+
+Every run produces a summary:
+
+```json
+{
+  "status": "completed",
+  "total_items": 200,
+  "completed_items": 200,
+  "summary_metrics": {
+    "governance_eval_pass_rate": 0.915,
+    "false_positive_rate": 0.020,
+    "false_negative_rate": 0.005,
+    "unsupported_claim_rate": 0.045,
+    "citation_coverage": 0.89,
+    "tool_result_mismatch_rate": 0.01,
+    "abstention_rate": 0.02,
+    "rewrite_success_rate": 0.76,
+    "p95_latency": 340,
+    "cost_per_1000_checks": 0.84,
+    "verdict_counts": {"pass": 183, "warn": 12, "fail": 4, "human_review": 1}
+  }
+}
+```
+
+Key metrics:
+
+| Metric | What it measures | Bad looks like |
+|---|---|---|
+| `governance_eval_pass_rate` | % of items where verdict = `pass` | Below your SLO floor |
+| `false_positive_rate` | % of items expected `pass` but got `fail/human_review` | Rising — policy is too strict |
+| `false_negative_rate` | % of items expected `fail` but got `pass` | Rising — policy is too lenient |
+| `unsupported_claim_rate` | Unsupported spans per item | Rising — retrieval quality dropped |
+| `rewrite_success_rate` | % of auto-rewrites that produced a passing answer | Should stay > 60% |
+
+## Wire into CI
+
+The common pattern: **fail the build if the regression dataset's pass rate drops**.
+
+```yaml
+# .github/workflows/eval.yml
+name: Governance Evals
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run governance eval
+        run: |
+          RUN_ID=$(curl -sS -X POST \
+            https://api.getbram.com/api/governor/v1/evals/runs/start/ \
+            -H "Authorization: Bearer ${{ secrets.BRAM_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"project_id": 42, "dataset_id": 7, "policy_id": 17}' \
+            | jq -r .eval_run.id)
+
+          # Poll for completion (max ~10m)
+          for i in $(seq 1 120); do
+            STATUS=$(curl -sS "https://api.getbram.com/api/governor/v1/evals/runs/$RUN_ID/" \
+              -H "Authorization: Bearer ${{ secrets.BRAM_API_KEY }}" | jq -r .eval_run.status)
+            if [ "$STATUS" = "completed" ]; then break; fi
+            sleep 5
+          done
+
+          PASS_RATE=$(curl -sS "https://api.getbram.com/api/governor/v1/evals/runs/$RUN_ID/" \
+            -H "Authorization: Bearer ${{ secrets.BRAM_API_KEY }}" \
+            | jq -r .eval_run.summary_metrics.governance_eval_pass_rate)
+
+          echo "Pass rate: $PASS_RATE"
+          awk -v r="$PASS_RATE" 'BEGIN { exit (r >= 0.90 ? 0 : 1) }'
+```
+
+The job fails if pass rate drops below 90% — blocks the PR from merging.
+
+## Dataset patterns
+
+<CardGroup cols={2}>
+  <Card title="Golden questions" icon="star">
+    10–50 questions you know the answers to cold. Expected verdict: `pass`. Catches prompt regressions fast.
+  </Card>
+  <Card title="Known hallucinations" icon="ghost">
+    Past incidents where the model produced a hallucinated answer. Expected verdict: `fail`. Prevents backsliding.
+  </Card>
+  <Card title="Edge cases" icon="triangle-exclamation">
+    Questions you've seen the bot get wrong in production. Expected verdict: `fail` or `human_review`. Tightens the bar.
+  </Card>
+  <Card title="Jailbreaks" icon="lock-open">
+    Prompts designed to get unsafe output. Expected verdict: `fail`. Confirms guardrails hold.
+  </Card>
+</CardGroup>
+
+## Versioning + history
+
+Every run is immutable and keeps:
+
+- The exact dataset version
+- The exact policy version
+- Per-item results (verdict, score, findings, latency)
+- Summary metrics
+- Cost breakdown
+
+Compare any two runs side-by-side from the **Runs → Compare** view in the dashboard.
+
+<Card title="Next: webhooks" icon="arrow-right" href="/evals/webhooks">
+  Get notified when an eval run completes or a real-time check fires a threshold.
+</Card>

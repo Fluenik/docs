@@ -1,0 +1,64 @@
+---
+title: BRAM MCP overview
+description: "A local MCP gateway that proxies your agent's tool calls through your policies, with native OS approval prompts for anything risky."
+---
+
+## The problem
+
+Modern AI assistants don't just chat — they send emails, write to your database, move money, and touch production systems. Most MCP clients auto-approve tool calls or ask once and never again. That "ask once" model breaks down the second your agent runs unattended.
+
+**BRAM MCP** is a local gateway that sits between your agent and every MCP server it calls. It enforces policy at the tool-call boundary, surfaces native OS approval prompts for anything risky, and writes a signed audit log of every decision.
+
+## Architecture
+
+```
+┌─────────────┐         ┌──────────────┐         ┌───────────────┐
+│ Your agent  │ ─MCP──▶ │  BRAM MCP    │ ─MCP──▶ │  MCP servers  │
+│  (Claude,   │         │  gateway     │         │ (GitHub, DB,  │
+│   Cursor,   │ ◀─tool─ │  policy +    │ ◀─tool─ │  Slack, etc.) │
+│   Cline)    │  result │  approval    │  result │               │
+└─────────────┘         └──────────────┘         └───────────────┘
+                               │
+                               ▼
+                        ┌──────────────┐
+                        │ Audit log +  │
+                        │ trace export │
+                        └──────────────┘
+```
+
+Your agent thinks it's talking directly to its MCP servers. BRAM transparently proxies every tool call, runs it through your policy, and decides: **allow**, **deny**, or **require human approval**.
+
+## What it does
+
+<CardGroup cols={2}>
+  <Card title="Policy enforcement" icon="shield-check">
+    YAML-based rules evaluated at the tool-call boundary — `gmail.send_email` requires approval, `shopify.update_order` is blocked outside business hours, `filesystem.write` is disabled for paths outside the project.
+  </Card>
+  <Card title="Native approval prompts" icon="bell">
+    When a policy says "require confirmation," BRAM surfaces a native OS modal with the full tool context. No scrolling through your chat history to find the `[Approve]` button.
+  </Card>
+  <Card title="Time-boxed trust" icon="clock">
+    "Approve all Gmail reads for 10 minutes" — grant granular, time-limited trust so routine tasks don't interrupt you without making you grant forever-permissions.
+  </Card>
+  <Card title="Searchable audit log" icon="magnifying-glass">
+    Every tool call, every policy decision, every approval — captured with timestamps, arguments, results, and a signed chain of custody.
+  </Card>
+</CardGroup>
+
+## Why local
+
+BRAM MCP runs on your machine, not in the cloud. Your tool arguments, your tool results, your secrets never leave your device. The only thing that syncs upstream is an audit fingerprint (hash + policy decision + timestamp) — and even that's optional and opt-in.
+
+This matters because:
+
+- **Compliance** — you stay in control of data residency. Tool payloads often include PII, credentials, or internal data your legal team wouldn't ship to a third-party SaaS.
+- **Latency** — policy decisions happen in-process. No extra network round-trip per tool call.
+- **Offline** — BRAM MCP works with no network, same as your editor.
+
+## Pricing
+
+BRAM Desktop (the MCP gateway) is **free for individual use**, forever. Team features (shared policies, central audit log, SSO) are part of the hosted plans.
+
+<Card title="Next: install BRAM Desktop" icon="arrow-right" href="/mcp/installation">
+  Install the gateway and point your first agent at it.
+</Card>

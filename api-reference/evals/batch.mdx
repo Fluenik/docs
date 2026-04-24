@@ -1,0 +1,67 @@
+---
+title: "POST /v1/evals/check/batch"
+description: "Grade up to 50 responses in a single call."
+---
+
+Auth: **runtime key** (`Authorization: Bearer brk_…`).
+
+Max batch size: **50** requests per call. Max request body: 5 MB.
+
+## Request body
+
+```json
+{
+  "requests": [
+    { /* same shape as /v1/evals/check body */ },
+    { /* ... */ }
+  ]
+}
+```
+
+Every item is a complete `/v1/evals/check` request — see [that reference](/api-reference/evals/check) for field-by-field details.
+
+## Response body
+
+```json
+{
+  "results": [
+    { /* same shape as /v1/evals/check response */ },
+    { /* ... */ }
+  ],
+  "summary": {
+    "total": 2,
+    "verdict_counts": {"pass": 1, "warn": 0, "fail": 1, "human_review": 0},
+    "avg_overall_score": 0.34
+  }
+}
+```
+
+Results are returned in the **same order** as the input `requests` array — use the index to correlate.
+
+## Notes
+
+- Individual items in the batch are independent — a failure on one doesn't fail the whole batch
+- Each item counts against the project's monthly check quota separately
+- Batch mode is rate-limited at **60 req/min per runtime key** (each batch = one rate-limit unit, regardless of size)
+
+## Example
+
+```bash
+curl -sS https://api.getbram.com/api/governor/v1/evals/check/batch/ \
+  -H "Authorization: Bearer $BRAM_RUNTIME_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requests": [
+      {
+        "query": "How do I reset my password?",
+        "answer": "Click Forgot password on the sign-in page.",
+        "context_chunks": [{"id": "kb_5", "text": "Users can reset passwords from the Forgot password link."}]
+      },
+      {
+        "query": "What is the refund window?",
+        "answer": "You have 60 days.",
+        "context_chunks": [{"id": "kb_1", "text": "Refunds must be submitted within 30 days."}]
+      }
+    ]
+  }'
+```

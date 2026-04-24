@@ -1,0 +1,167 @@
+---
+title: Policies
+description: "The full policy schema — what every field does, what sensible defaults look like, and when to deviate."
+---
+
+A policy is a single object that encodes a deployment's governance rules. One policy can apply to a whole workspace (workspace-default policy), a specific project, or a tagged subset of requests.
+
+## Full schema
+
+```json
+{
+  "name": "Support groundedness policy",
+  "slug": "support_groundedness",
+  "project_id": 42,
+  "domain": "customer_support",
+  "risk_level": "medium",
+  "default_mode": "detect",
+
+  "require_citations": true,
+  "require_evidence_for_factual": true,
+  "abstain_on_missing_evidence": true,
+  "require_tool_consistency": true,
+  "forbid_critical_transformations": true,
+
+  "min_context_chunks": 1,
+  "min_average_retrieval_score": 0.0,
+
+  "pass_threshold": 0.2,
+  "warn_threshold": 0.45,
+  "fail_threshold": 0.65,
+  "human_review_threshold": 0.55,
+
+  "ai_eval_confidence_min": 0.25,
+  "ai_eval_confidence_max": 0.70,
+
+  "enable_nano_prepass": true,
+  "enable_ai_judge": true,
+  "enable_azure_groundedness": false,
+  "allow_auto_rewrite": false,
+
+  "deterministic_rule_pack": "v1_default",
+  "is_active": true
+}
+```
+
+## Field reference
+
+### Identity + scope
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Human-readable; shown in the Policies tab. |
+| `slug` | string | URL-safe identifier; referenced in API calls. Must be unique per workspace. |
+| `project_id` | integer \| null | When set, this policy only applies to that project. When null, it's the workspace default. |
+| `domain` | enum | `generic`, `customer_support`, `low_risk_marketing`, `internal_ops`, `finance`, `medical`, `legal`. Drives default thresholds. |
+| `risk_level` | enum | `low`, `medium`, `high`, `critical`. Informational — tags findings in the audit log. |
+| `default_mode` | enum | `detect`, `detect_and_rewrite`, `block_on_fail`. See [Overview → Policy modes](/governance/overview#policy-modes). |
+| `is_active` | bool | When false, the policy is stored but not evaluated. |
+
+### Rule pack & enforcement
+
+| Field | Type | What it does |
+|---|---|---|
+| `require_citations` | bool | Every factual sentence must cite a `context_chunks` entry. Missing citations → `medium` finding. |
+| `require_evidence_for_factual` | bool | Factual responses without any `context_chunks` → `critical` finding. Hard block. |
+| `deterministic_rule_pack` | string | Which version of the deterministic rules to run. `v1_default` is the current general-purpose pack. |
+
+### Quality & safety
+
+| Field | Type | What it does |
+|---|---|---|
+| `abstain_on_missing_evidence` | bool | When no evidence is provided, the response must contain an abstention marker ("I don't know," etc.). Otherwise → `critical`. |
+
+### Model & tool constraints
+
+| Field | Type | What it does |
+|---|---|---|
+| `require_tool_consistency` | bool | Scalar values in the response that appear to come from a tool result must match that tool's payload. Mismatch → `critical`. |
+| `forbid_critical_transformations` | bool | Prevents the model from rewriting critical fields (`total`, `amount`, `balance`, `status`, `date`, `due_date`, `plan`, `version`) away from the supplied tool value. |
+| `allow_auto_rewrite` | bool | Enables the auto-rewrite step in `detect_and_rewrite` mode. Only safe, grounded rewrites are applied. |
+
+### Retrieval sufficiency
+
+| Field | Type | Default | What it does |
+|---|---|---:|---|
+| `min_context_chunks` | integer | 1 | Minimum non-empty context chunks required for a factual request. |
+| `min_average_retrieval_score` | float | 0.0 | Minimum mean retrieval score across provided chunks. |
+
+### Thresholds
+
+| Field | Range | Meaning |
+|---|---|---|
+| `pass_threshold` | 0–1 | Overall risk score ≤ this → `pass` |
+| `warn_threshold` | 0–1 | Overall risk score ≤ this → `warn` |
+| `fail_threshold` | 0–1 | Overall risk score ≥ this → `fail` |
+| `human_review_threshold` | 0–1 | In regulated domains, overall score ≥ this → `human_review` |
+
+Presets: pick **Strict**, **Balanced**, or **Lenient** from the policy modal's **Presets** dropdown to set all four at once.
+
+### AI judge routing
+
+| Field | Type | Default | What it does |
+|---|---|---:|---|
+| `enable_nano_prepass` | bool | true | Cheap LLM pre-pass for claim extraction + routing. |
+| `enable_ai_judge` | bool | true | Expensive LLM-as-judge for ambiguous cases. |
+| `enable_azure_groundedness` | bool | false | Calls Azure Content Safety groundedness API as a second opinion. |
+| `ai_eval_confidence_min` | 0–1 | 0.25 | Only run the AI judge when deterministic confidence is ≥ this. |
+| `ai_eval_confidence_max` | 0–1 | 0.70 | Only run the AI judge when deterministic confidence is ≤ this. |
+
+The confidence band is the key cost-control lever. Deterministic checks either find a critical issue (low confidence → skip the judge, it won't help) OR pass clean (high confidence → skip the judge, no need). The judge only runs in the ambiguous middle.
+
+## Recommended starting points
+
+<CardGroup cols={3}>
+  <Card title="RAG support bot">
+```json
+{
+  "domain": "customer_support",
+  "default_mode": "detect",
+  "require_citations": true,
+  "require_evidence_for_factual": true,
+  "abstain_on_missing_evidence": true,
+  "enable_ai_judge": true,
+  "allow_auto_rewrite": false
+}
+```
+  </Card>
+  <Card title="Financial copy">
+```json
+{
+  "domain": "finance",
+  "default_mode": "block_on_fail",
+  "require_citations": true,
+  "require_evidence_for_factual": true,
+  "forbid_critical_transformations": true,
+  "require_tool_consistency": true,
+  "enable_ai_judge": true,
+  "enable_azure_groundedness": true
+}
+```
+  </Card>
+  <Card title="Internal copilot">
+```json
+{
+  "domain": "internal_ops",
+  "default_mode": "detect_and_rewrite",
+  "require_citations": false,
+  "require_tool_consistency": true,
+  "allow_auto_rewrite": true,
+  "enable_ai_judge": true
+}
+```
+  </Card>
+</CardGroup>
+
+## Versioning + rollout
+
+Every policy change is a new version. The dashboard ships with:
+
+- **Canary rollout** — route N% of traffic to the new version before full cut-over
+- **Diff view** — side-by-side comparison of any two versions
+- **One-click rollback** — revert to a known-good version instantly
+- **Per-environment pinning** — pin `prod` to v12, `staging` to v13
+
+<Card title="Next: native approval flows" icon="arrow-right" href="/governance/approvals">
+  How human-in-the-loop approval surfaces — native OS modals, Slack, webhooks.
+</Card>

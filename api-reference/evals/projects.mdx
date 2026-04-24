@@ -1,0 +1,86 @@
+---
+title: "Projects"
+description: "Create, list, update, and delete eval projects."
+---
+
+Auth: **API key** (`Authorization: Bearer bak_…`).
+
+Projects are the unit of isolation in Evals — each has its own policies, runtime keys, datasets, webhooks, and audit stream.
+
+## List projects
+
+```http
+GET /api/governor/v1/evals/projects/
+```
+
+Response:
+```json
+{
+  "projects": [
+    {
+      "id": 42,
+      "name": "Support bot production",
+      "slug": "support_bot_prod",
+      "description": "",
+      "default_domain": "customer_support",
+      "default_mode": "detect",
+      "monthly_check_limit": 10000,
+      "monthly_ai_check_limit": 5000,
+      "monthly_checks_used": 1342,
+      "monthly_ai_checks_used": 587,
+      "alert_fail_rate_threshold": 0.15,
+      "alert_warn_rate_threshold": 0.25,
+      "is_active": true,
+      "api_key_count": 2,
+      "trace_count": 1342,
+      "created_at": "2026-03-10T14:22:00Z",
+      "updated_at": "2026-04-22T18:04:12Z"
+    }
+  ]
+}
+```
+
+## Create a project
+
+```http
+POST /api/governor/v1/evals/projects/
+```
+
+Body:
+```json
+{
+  "name": "Support bot production",
+  "slug": "support_bot_prod",
+  "description": "RAG bot fronting the help center",
+  "default_domain": "customer_support",
+  "default_mode": "detect",
+  "monthly_check_limit": 10000,
+  "monthly_ai_check_limit": 5000,
+  "alert_fail_rate_threshold": 0.15,
+  "alert_warn_rate_threshold": 0.25,
+  "is_active": true
+}
+```
+
+`slug` must be unique within your workspace, lowercase, and only contain `[a-z0-9_]`.
+
+## Retrieve metrics
+
+```http
+GET /api/governor/v1/evals/projects/{id}/metrics/?days=14
+```
+
+Returns aggregate metrics + daily trends + top-failing dimensions. See `GovernanceEvalMetrics` in the dashboard types for the full shape — key fields:
+
+- `summary.total_checks`, `pass_rate`, `fail_rate`, `avg_latency_ms`, `p95_latency_ms`, `cost_per_1000_checks`
+- `trends` — one entry per day with pass/warn/fail/human_review counts
+- `top_unsupported_claims`, `top_failing_source_collections`, `top_failing_tools`
+
+## Update + delete
+
+```http
+PATCH /api/governor/v1/evals/projects/{id}/
+DELETE /api/governor/v1/evals/projects/{id}/
+```
+
+`DELETE` cascades to keys, traces, datasets, eval runs, and webhook definitions scoped to the project. **Irreversible** — scope API keys tightly.

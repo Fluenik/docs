@@ -1,0 +1,112 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "BRAM",
+  "logo": {
+    "light": "/images/bram_logo_black.png",
+    "dark": "/images/bram_logo.png"
+  },
+  "favicon": "/images/favicon.png",
+  "colors": {
+    "primary": "#7166DB",
+    "light": "#A598F5",
+    "dark": "#5B4AE0",
+    "background": {
+      "dark": "#01051D"
+    },
+    "anchors": {
+      "from": "#3BA2FD",
+      "to": "#7166DB"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@getbram.com"
+    },
+    {
+      "name": "Status",
+      "url": "https://status.getbram.com"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Open BRAM",
+    "url": "https://app.getbram.com"
+  },
+  "tabs": [
+    {
+      "name": "Documentation",
+      "url": "/"
+    },
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Changelog",
+      "icon": "clock-rotate-left",
+      "url": "https://getbram.com/changelog"
+    },
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/bram-ai"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Get started",
+      "pages": [
+        "introduction",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "BRAM MCP",
+      "pages": [
+        "mcp/overview",
+        "mcp/installation",
+        "mcp/agents",
+        "mcp/policies"
+      ]
+    },
+    {
+      "group": "Governance",
+      "pages": [
+        "governance/overview",
+        "governance/policies",
+        "governance/approvals",
+        "governance/audit-logs"
+      ]
+    },
+    {
+      "group": "Evals",
+      "pages": [
+        "evals/overview",
+        "evals/quickstart",
+        "evals/policies",
+        "evals/runtime",
+        "evals/datasets",
+        "evals/webhooks"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/authentication",
+        "api-reference/evals/check",
+        "api-reference/evals/batch",
+        "api-reference/evals/projects",
+        "api-reference/evals/policies",
+        "api-reference/evals/keys",
+        "api-reference/evals/webhooks"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/bram-ai",
+    "x": "https://x.com/bram_ai",
+    "linkedin": "https://www.linkedin.com/company/bram-ai"
+  }
+}

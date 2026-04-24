@@ -1,0 +1,95 @@
+---
+title: Governance overview
+description: "Define policies that apply at prompt, response, and tool-call boundaries — enforced in real time across every model, agent, and tool."
+---
+
+Governance in BRAM is the set of rules that every AI interaction is measured against. You write the rules once; we enforce them across every surface — runtime eval checks, MCP tool calls, approval flows, audit logs.
+
+## The three boundaries
+
+<CardGroup cols={3}>
+  <Card title="Prompt boundary" icon="arrow-right-to-bracket">
+    Runs before the model sees input. Redaction, PII removal, prompt-injection screening.
+  </Card>
+  <Card title="Response boundary" icon="arrow-right-from-bracket">
+    Runs after the model produces output. Groundedness, citation coverage, hallucination detection, toxicity, jailbreak.
+  </Card>
+  <Card title="Tool-call boundary" icon="wrench">
+    Runs when the agent tries to execute a tool. Policy-gated approval, deny lists, argument sanitisation.
+  </Card>
+</CardGroup>
+
+BRAM enforces at all three. The same policy object controls response-level eval checks (`/v1/evals/check`) and tool-call approvals (BRAM MCP).
+
+## Policy modes
+
+Every policy has a `default_mode` that determines what happens when a rule fails:
+
+| Mode | Behavior |
+|---|---|
+| `detect` | Log findings, produce a verdict, do not modify the response. Great for **observation only** — first week of production, catch-and-learn. |
+| `detect_and_rewrite` | Log findings; when a safe auto-correction is available, replace the model's answer with a grounded rewrite. |
+| `block_on_fail` | Log findings; when the verdict is `fail`, return an error to the caller. Use for **high-stakes** workflows where a bad answer is worse than no answer. |
+
+## Verdicts
+
+Every check produces one of four verdicts:
+
+<CardGroup cols={2}>
+  <Card title="pass" icon="check">
+    Overall score below `pass_threshold`. No findings at or above `medium` severity.
+  </Card>
+  <Card title="warn" icon="triangle-exclamation">
+    Overall score above `warn_threshold` OR at least one unsupported span detected. Response is flagged but not blocked.
+  </Card>
+  <Card title="fail" icon="xmark">
+    Overall score above `fail_threshold` OR a deterministic critical finding (e.g. unsupported currency, blocked transformation).
+  </Card>
+  <Card title="human_review" icon="user">
+    Overall score above `human_review_threshold` in a regulated domain (finance / medical / legal). Routed to an in-workspace review queue.
+  </Card>
+</CardGroup>
+
+## Domain-aware thresholds
+
+Financial answers have different stakes than marketing copy. BRAM ships with domain defaults that tighten thresholds for regulated content:
+
+| Domain | Pass | Warn | Fail | Human review |
+|---|---:|---:|---:|---:|
+| `low_risk_marketing` | 0.22 | 0.45 | 0.70 | 0.60 |
+| `generic` | 0.20 | 0.45 | 0.68 | 0.58 |
+| `customer_support` | 0.20 | 0.42 | 0.65 | 0.55 |
+| `internal_ops` | 0.18 | 0.40 | 0.62 | 0.50 |
+| `finance` | 0.12 | 0.28 | 0.45 | 0.35 |
+| `medical` | 0.10 | 0.24 | 0.42 | 0.30 |
+| `legal` | 0.10 | 0.24 | 0.42 | 0.30 |
+
+You can override these per-policy. See [Policies](/governance/policies).
+
+## Deterministic + AI judge
+
+BRAM runs **two kinds of checks** on every response:
+
+- **Deterministic** — regex, schema validation, citation matching, tool-output consistency, scalar exact-match, abstention detection. Cheap, exhaustive, and the same answer every time.
+- **AI judge** — LLM-as-judge faithfulness for nuanced calls (partially supported claims, semantic contradictions). Expensive, but only runs when the deterministic score is in an ambiguous band — so cost scales with ambiguity, not traffic.
+
+Deterministic findings are the source of truth for compliance; the AI judge is the source of nuance. See [Evals → Overview](/evals/overview) for the scoring model.
+
+## Who enforces what
+
+| Surface | Enforces at | Examples |
+|---|---|---|
+| **Runtime `/v1/evals/check`** | Response boundary | Chatbot answer, RAG response, code generation output |
+| **BRAM MCP** | Tool-call boundary | `gmail.send`, `filesystem.write`, `database.execute` |
+| **Offline datasets** | Response boundary (regression) | CI-pinned test cases that must stay above pass rate |
+
+## What you get
+
+- **Signed audit log** of every decision (SOC 2 / GDPR / HIPAA ready)
+- **Policy versioning** with canary rollout + one-click rollback
+- **Webhook notifications** when fail-rate or warn-rate thresholds trip
+- **Cross-provider** — works with Anthropic, OpenAI, Azure OpenAI, Bedrock, open-source
+
+<Card title="Next: write a policy" icon="arrow-right" href="/governance/policies">
+  The full policy schema, mode by mode.
+</Card>
