@@ -5,7 +5,7 @@ description: "Get BRAM running in five minutes — from zero to a governed agent
 
 This guide takes you from signup to a working setup with:
 
-- A **BRAM MCP gateway** proxying your agent's tool calls
+- A **BRAM Gateway** endpoint proxying your agent's tool calls
 - An **eval project** + runtime key for the `/v1/evals/check` API
 - A first **policy** that enforces citation-grounding and blocks unsupported claims
 
@@ -21,7 +21,7 @@ BRAM has two surfaces, and you don't need both to start:
 
 <Tabs>
   <Tab title="Runtime API (fastest)">
-    Call our Evals API inline from your app. No local install. One bearer token.
+    Call our Evals API inline from your app. No SDK, no install. One bearer token.
 
     ```bash
     curl https://api.getbram.com/api/governor/v1/evals/check/ \
@@ -40,23 +40,26 @@ BRAM has two surfaces, and you don't need both to start:
 
     [Continue to the Evals quickstart →](/evals/quickstart)
   </Tab>
-  <Tab title="MCP gateway (agents)">
-    Install **BRAM Desktop**, point any MCP-compatible client (Claude Desktop, Cursor, Cline) at it, and every tool call your agent makes is proxied through your policies.
+  <Tab title="MCP Gateway (agents)">
+    Point any MCP-compatible client (Claude Desktop, Cursor, Cline, custom) at the BRAM Gateway endpoint and every tool call your agent makes is proxied through your policies.
 
-    ```bash
-    # macOS
-    brew install bram-ai/tap/bram-desktop
-
-    # Windows
-    winget install bram.bram-desktop
-
-    # Linux
-    curl -fsSL https://getbram.com/install.sh | sh
+    ```jsonc
+    // ~/Library/Application Support/Claude/claude_desktop_config.json
+    {
+      "mcpServers": {
+        "bram": {
+          "url": "https://gateway.getbram.com/<workspace-slug>/mcp",
+          "headers": {
+            "Authorization": "Bearer brk_live_..."
+          }
+        }
+      }
+    }
     ```
 
-    Use this if you're running MCP-based agents on your own machine or behind your firewall.
+    Use this if you're running MCP-based agents and want centralized policy enforcement, audit, and approvals.
 
-    [Continue to the MCP quickstart →](/mcp/installation)
+    [Continue to the Gateway setup →](/mcp/installation)
   </Tab>
 </Tabs>
 
@@ -145,7 +148,7 @@ Reload the **Runs** tab and you'll see the trace appear. Click into it to see th
 
 <CardGroup cols={3}>
   <Card title="Govern an agent" icon="robot" href="/mcp/agents">
-    Plug BRAM Desktop in front of Claude / Cursor / Cline.
+    Point Claude / Cursor / Cline at the BRAM Gateway endpoint.
   </Card>
   <Card title="Write better policies" icon="shield-check" href="/governance/policies">
     Per-domain thresholds, tool-consistency rules, abstention enforcement.

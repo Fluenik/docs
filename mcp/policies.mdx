@@ -1,11 +1,11 @@
 ---
 title: Writing policies
-description: "YAML-based rules that govern every tool call your agent makes."
+description: "Versioned rules that govern every tool call your agents make through BRAM Gateway."
 ---
 
-BRAM policies are YAML files. Each policy is a list of **rules**, and each rule matches on tool name, arguments, or context and produces a **decision**: `allow`, `deny`, or `require_approval`.
+BRAM policies are versioned rule bundles managed in the dashboard at [app.getbram.com](https://app.getbram.com) under **Tools & Policies**. Each policy is a list of **rules**, and each rule matches on tool name, arguments, or context and produces a **decision**: `allow`, `deny`, or `require_approval`.
 
-The default policy lives at `~/.bram/policy.yaml`. You can point BRAM at a different file with `BRAM_POLICY_PATH=...` or via the **Settings → Policy** panel.
+You can edit policies in the dashboard UI, or POST the same YAML/JSON via the [Governor API](/api-reference/authentication). Both paths produce versioned, auditable changes — every edit creates a new immutable version with `draft` / `canary` / `live` states and one-click rollback.
 
 ## Policy structure
 
@@ -25,11 +25,11 @@ rules:
     decision: require_approval
     reason: "Writing to {{args.path}}"
 
-  # 3. Block writes outside the project
+  # 3. Block writes outside an allowed prefix
   - match:
       tool: "filesystem.write_file"
       args:
-        path: "!startswith:/Users/kyle/projects/"
+        path: "!startswith:/workspace/projects/"
     decision: deny
     reason: "Writes outside projects/ are not permitted"
 
@@ -90,10 +90,12 @@ Supported operators:
 match:
   tool: "slack.post_message"
   context:
+    agent_id: "support-bot-prod"
     time: "outside:09:00-17:00"        # business hours
     day: "in:sat,sun"                  # weekends
-    user_idle_minutes: ">30"           # unattended
 ```
+
+`context.agent_id` lets a single policy apply different rules per agent — useful for one shared policy across many agents.
 
 ## Decisions
 
@@ -102,16 +104,16 @@ match:
     Auto-approve — pass the tool call through to the upstream MCP server.
   </Card>
   <Card title="require_approval" icon="bell">
-    Surface a native OS modal with full tool context; block the call until a human decides.
+    Pause the call and route the request to your dashboard, Slack, or a webhook for a human decision.
   </Card>
   <Card title="deny" icon="xmark">
     Block the tool call. Agent sees a tool error with `reason`.
   </Card>
 </CardGroup>
 
-Every decision is recorded to the audit log with the matching rule's index, so you can trace why a call was allowed/blocked.
+Every decision is recorded to the audit log with the matching rule's index and the policy version, so you can trace exactly why a call was allowed or blocked.
 
-## Time-boxed trust
+## Time-boxed approvals
 
 Approvals can be **remembered for a window**:
 
@@ -120,33 +122,36 @@ Approvals can be **remembered for a window**:
     tool_prefix: "gmail."
   decision: require_approval
   remember:
-    scope: "session"          # until BRAM restarts
-    duration: "10m"           # or for 10 minutes
+    scope: "agent"            # or "workspace"
+    duration: "10m"           # or "1h", "session"
     key: "gmail-all"          # grouped so one approval covers all gmail.*
 ```
 
-The approval modal will show a **Remember for 10 min** toggle. Check it, and identical calls in the window auto-approve without re-prompting.
+The approval card will show a **Remember for 10 min** option. Pick it, and identical calls in the window auto-approve without re-prompting.
+
+## Versioning + rollouts
+
+Every save creates a new immutable policy version. Versions move through states:
+
+- **draft** — editable, not enforced
+- **canary** — enforced for a fraction of traffic (default 10%) so you can compare decisions before promoting
+- **live** — enforced for all traffic
+
+Rollouts are managed in the dashboard under **Tools & Policies → Versions**. One-click rollback restores the previous live version instantly.
 
 ## Testing policies
 
-Run your policy against a dry-run corpus:
+Run a policy against a fixture corpus from the dashboard or via API:
 
 ```bash
-bram policy test ~/.bram/policy.yaml --fixtures ~/.bram/fixtures/
+curl -X POST https://api.getbram.com/api/governor/v1/policies/$POLICY_ID/test/ \
+  -H "Authorization: Bearer $BRAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @fixtures.json
 ```
 
-Fixtures are JSON files with `tool`, `args`, and an expected `decision`. `bram policy test` runs each one through the policy and reports mismatches.
+`fixtures.json` is a list of `{ tool, args, expected_decision }`. The response reports per-fixture matches and mismatches. CI can use this to gate policy changes before they're promoted from canary to live.
 
-## Hosted policies (team plans)
-
-On team plans, policies can be managed centrally from the BRAM dashboard:
-
-1. Write the policy once in app.getbram.com
-2. Every team member's BRAM Desktop pulls it on startup
-3. Overrides are tracked per-user and require admin approval
-
-See [Governance → Policies](/governance/policies) for the full schema and API.
-
-<Card title="Next: native approval flows" icon="arrow-right" href="/governance/approvals">
-  How approval modals work across macOS, Windows, and Linux.
+<Card title="Next: approval flows" icon="arrow-right" href="/governance/approvals">
+  How approval requests reach reviewers — dashboard, Slack, and webhook surfaces.
 </Card>

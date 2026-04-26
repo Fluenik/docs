@@ -1,22 +1,22 @@
 ---
-title: BRAM MCP overview
-description: "A local MCP gateway that proxies your agent's tool calls through your policies, with native OS approval prompts for anything risky."
+title: BRAM Gateway overview
+description: "A hosted MCP gateway that proxies your agents' tool calls through your policies, with inline guardrails and a signed audit log."
 ---
 
 ## The problem
 
-Modern AI assistants don't just chat — they send emails, write to your database, move money, and touch production systems. Most MCP clients auto-approve tool calls or ask once and never again. That "ask once" model breaks down the second your agent runs unattended.
+Modern AI agents don't just chat — they send emails, write to your database, move money, and touch production systems. Most MCP clients auto-approve tool calls or ask once and never again. That "ask once" model breaks down the second your agent runs unattended, and it doesn't help at all when you have many agents in production.
 
-**BRAM MCP** is a local gateway that sits between your agent and every MCP server it calls. It enforces policy at the tool-call boundary, surfaces native OS approval prompts for anything risky, and writes a signed audit log of every decision.
+**BRAM Gateway** is a hosted MCP gateway that sits between your agents and every MCP server they call. It enforces policy at the tool-call boundary, runs inline guardrails on requests and responses, and writes a tamper-evident audit log of every decision.
 
 ## Architecture
 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌───────────────┐
-│ Your agent  │ ─MCP──▶ │  BRAM MCP    │ ─MCP──▶ │  MCP servers  │
-│  (Claude,   │         │  gateway     │         │ (GitHub, DB,  │
-│   Cursor,   │ ◀─tool─ │  policy +    │ ◀─tool─ │  Slack, etc.) │
-│   Cline)    │  result │  approval    │  result │               │
+│ Your agent  │ ─MCP──▶ │ BRAM Gateway │ ─MCP──▶ │  MCP servers  │
+│  (Claude,   │         │  policy +    │         │ (GitHub, DB,  │
+│   Cursor,   │ ◀─tool─ │  guardrails  │ ◀─tool─ │  Slack, etc.) │
+│   custom)   │  result │  + audit     │  result │               │
 └─────────────┘         └──────────────┘         └───────────────┘
                                │
                                ▼
@@ -26,39 +26,38 @@ Modern AI assistants don't just chat — they send emails, write to your databas
                         └──────────────┘
 ```
 
-Your agent thinks it's talking directly to its MCP servers. BRAM transparently proxies every tool call, runs it through your policy, and decides: **allow**, **deny**, or **require human approval**.
+Your agent connects to the BRAM Gateway endpoint exactly the way it would connect to any MCP server. The gateway speaks native MCP, applies your policies, and forwards allowed calls upstream to the real MCP servers you've registered. Decisions are: **allow**, **deny**, or **require human approval**.
 
 ## What it does
 
 <CardGroup cols={2}>
   <Card title="Policy enforcement" icon="shield-check">
-    YAML-based rules evaluated at the tool-call boundary — `gmail.send_email` requires approval, `shopify.update_order` is blocked outside business hours, `filesystem.write` is disabled for paths outside the project.
+    Versioned rules evaluated at the tool-call boundary — `gmail.send_email` requires approval, `shopify.update_order` is blocked outside business hours, `filesystem.write` is denied for paths outside an allowed prefix.
   </Card>
-  <Card title="Native approval prompts" icon="bell">
-    When a policy says "require confirmation," BRAM surfaces a native OS modal with the full tool context. No scrolling through your chat history to find the `[Approve]` button.
+  <Card title="Inline guardrails" icon="shield">
+    Pattern-based detectors run on every gateway request and response — prompt-injection on the way in, data-leakage on the way out. Findings can redact the payload, escalate, or block.
   </Card>
-  <Card title="Time-boxed trust" icon="clock">
-    "Approve all Gmail reads for 10 minutes" — grant granular, time-limited trust so routine tasks don't interrupt you without making you grant forever-permissions.
+  <Card title="Approval workflows" icon="bell">
+    When a policy says "require approval," BRAM routes the request to your dashboard, Slack, or a webhook. The tool call pauses until a human decides.
   </Card>
   <Card title="Searchable audit log" icon="magnifying-glass">
     Every tool call, every policy decision, every approval — captured with timestamps, arguments, results, and a signed chain of custody.
   </Card>
 </CardGroup>
 
-## Why local
+## Why a gateway
 
-BRAM MCP runs on your machine, not in the cloud. Your tool arguments, your tool results, your secrets never leave your device. The only thing that syncs upstream is an audit fingerprint (hash + policy decision + timestamp) — and even that's optional and opt-in.
+BRAM Gateway runs in the cloud, with one shared control plane for every agent in your workspace. That matters because:
 
-This matters because:
-
-- **Compliance** — you stay in control of data residency. Tool payloads often include PII, credentials, or internal data your legal team wouldn't ship to a third-party SaaS.
-- **Latency** — policy decisions happen in-process. No extra network round-trip per tool call.
-- **Offline** — BRAM MCP works with no network, same as your editor.
+- **No code changes** — agents point at a URL instead of a local server. No SDK, no daemon, no install.
+- **One policy plane** — policies, guardrails, and audit live with your team, not on each developer's laptop.
+- **Production traffic** — designed for many agents, many MCP servers, and serious request volume. Per-workspace quotas, per-agent kill switch, canary policy rollouts.
+- **Deployment options** — managed cloud on Starter and Pro; on-prem or VPC on Enterprise so traffic never leaves your perimeter.
 
 ## Pricing
 
-BRAM Desktop (the MCP gateway) is **free for individual use**, forever. Team features (shared policies, central audit log, SSO) are part of the hosted plans.
+A free Developer tier covers personal projects. Starter and Pro add higher request volume, advanced policies, and team features. See the [pricing page](https://getbram.com/pricing).
 
-<Card title="Next: install BRAM Desktop" icon="arrow-right" href="/mcp/installation">
-  Install the gateway and point your first agent at it.
+<Card title="Next: connect to the gateway" icon="arrow-right" href="/mcp/installation">
+  Issue an API key, point your agent at the gateway endpoint, and ship your first policy.
 </Card>

@@ -3,17 +3,6 @@ title: Introduction
 description: "BRAM is the AI trust platform — govern, observe, and evaluate every model, agent, and tool call."
 ---
 
-<img
-  className="block dark:hidden"
-  src="/images/hero-light.png"
-  alt="BRAM hero"
-/>
-<img
-  className="hidden dark:block"
-  src="/images/hero-dark.png"
-  alt="BRAM hero"
-/>
-
 BRAM sits between your AI agents and the rest of your stack. It gives product, engineering, and compliance teams one place to:
 
 - **Govern** — define policies that apply at prompt, response, and tool-call boundaries, and enforce them in real time.
@@ -23,8 +12,8 @@ BRAM sits between your AI agents and the rest of your stack. It gives product, e
 ## The three surfaces
 
 <CardGroup cols={3}>
-  <Card title="BRAM MCP" icon="plug" href="/mcp/overview">
-    A local MCP gateway that proxies agent tool calls through your policies and surfaces native OS approval prompts for anything risky.
+  <Card title="BRAM Gateway" icon="plug" href="/mcp/overview">
+    A hosted MCP gateway that proxies agent tool calls through your policies, runs inline guardrails, and routes risky calls to a human approver.
   </Card>
   <Card title="Governance" icon="shield-check" href="/governance/overview">
     The policy layer. Define rules once, apply them across every model / agent / tool, and review every decision in the audit log.
@@ -41,7 +30,7 @@ BRAM sits between your AI agents and the rest of your stack. It gives product, e
     Ship AI features without having to build policy enforcement, audit logging, and eval pipelines yourself.
   </Card>
   <Card title="Compliance + security" icon="scale-balanced">
-    Demonstrate SOC 2 / GDPR / HIPAA / internal AI governance with signed audit logs and policy decision trails.
+    Demonstrate AI governance with signed audit logs and policy decision trails for internal review and customer audits.
   </Card>
 </CardGroup>
 

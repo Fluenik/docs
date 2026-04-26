@@ -19,7 +19,7 @@ Governance in BRAM is the set of rules that every AI interaction is measured aga
   </Card>
 </CardGroup>
 
-BRAM enforces at all three. The same policy object controls response-level eval checks (`/v1/evals/check`) and tool-call approvals (BRAM MCP).
+BRAM enforces at all three. The same policy object controls response-level eval checks (`/v1/evals/check`) and tool-call approvals (BRAM Gateway).
 
 ## Policy modes
 
@@ -80,12 +80,12 @@ Deterministic findings are the source of truth for compliance; the AI judge is t
 | Surface | Enforces at | Examples |
 |---|---|---|
 | **Runtime `/v1/evals/check`** | Response boundary | Chatbot answer, RAG response, code generation output |
-| **BRAM MCP** | Tool-call boundary | `gmail.send`, `filesystem.write`, `database.execute` |
+| **BRAM Gateway** | Tool-call boundary | `gmail.send`, `filesystem.write`, `database.execute` |
 | **Offline datasets** | Response boundary (regression) | CI-pinned test cases that must stay above pass rate |
 
 ## What you get
 
-- **Signed audit log** of every decision (SOC 2 / GDPR / HIPAA ready)
+- **Signed audit log** of every decision — tamper-evident, exportable, customer-KMS encryption available
 - **Policy versioning** with canary rollout + one-click rollback
 - **Webhook notifications** when fail-rate or warn-rate thresholds trip
 - **Cross-provider** — works with Anthropic, OpenAI, Azure OpenAI, Bedrock, open-source

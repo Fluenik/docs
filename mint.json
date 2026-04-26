@@ -2,20 +2,28 @@
   "$schema": "https://mintlify.com/schema.json",
   "name": "BRAM",
   "logo": {
-    "light": "/images/bram_logo_black.png",
-    "dark": "/images/bram_logo.png"
+    "light": "/images/bram_logo_light.svg",
+    "dark": "/images/bram_logo_dark.svg"
   },
-  "favicon": "/images/favicon.png",
+  "favicon": "/images/bram_gateway_logo.png",
   "colors": {
-    "primary": "#7166DB",
-    "light": "#A598F5",
-    "dark": "#5B4AE0",
+    "primary": "#7c3aed",
+    "light": "#c4b5fd",
+    "dark": "#5b21b6",
     "background": {
-      "dark": "#01051D"
+      "dark": "#03060f"
     },
     "anchors": {
-      "from": "#3BA2FD",
-      "to": "#7166DB"
+      "from": "#67e8f9",
+      "to": "#a78bfa"
+    }
+  },
+  "font": {
+    "headings": {
+      "family": "Sora"
+    },
+    "body": {
+      "family": "Inter"
     }
   },
   "topbarLinks": [
@@ -63,7 +71,7 @@
       ]
     },
     {
-      "group": "BRAM MCP",
+      "group": "BRAM Gateway",
       "pages": [
         "mcp/overview",
         "mcp/installation",

@@ -12,7 +12,7 @@ BRAM writes an append-only audit log of every decision it makes. The log is the 
     Every call to `/v1/evals/check` → full trace (query, answer, verdict, score, findings, claim-level results).
   </Card>
   <Card title="Tool calls" icon="wrench">
-    Every tool call proxied through BRAM MCP → tool name, arguments, result, policy decision.
+    Every tool call proxied through BRAM Gateway → tool name, arguments, result, policy decision.
   </Card>
   <Card title="Approvals" icon="bell">
     Every `require_approval` decision → request, responder, scope, outcome.
@@ -120,15 +120,15 @@ From the dashboard **Audit Log → Exports**:
 
 Exports are asynchronous; you get an email + dashboard notification when the archive is ready.
 
-## Compliance profiles
+## Retention profiles
 
 Pre-built retention + storage profiles:
 
 | Profile | Payload | Retention | Notes |
 |---|---|---|---|
-| **SOC 2** | Hash only | 1 year hot + cold | Default for new workspaces |
-| **GDPR** | Hash only, right-to-erasure hooks | 30 days hot + warm | DSARs supported out of the box |
-| **HIPAA** | Encrypted with customer KMS | 6 years | BAA required; contact sales |
-| **FINRA** | Encrypted with customer KMS + WORM | 7 years | Immutable cold tier on S3 Object Lock |
+| **Standard** | Hash only | 1 year hot + cold | Default for new workspaces |
+| **Right-to-erasure** | Hash only, deletion hooks | 30 days hot + warm | Subject-deletion requests handled out of the box |
+| **Customer-KMS** | Encrypted with customer KMS | 6 years | Customer holds the key; contact sales for rollout |
+| **Immutable / WORM** | Encrypted with customer KMS + WORM | 7 years | Immutable cold tier on S3 Object Lock |
 
-Switch profiles in **Settings → Compliance**. Changing retention only applies to events **written after** the change; historical events keep their original retention.
+Switch profiles in **Settings → Audit**. Changing retention only applies to events **written after** the change; historical events keep their original retention.
