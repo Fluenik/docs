@@ -2,10 +2,10 @@
   "$schema": "https://mintlify.com/schema.json",
   "name": "BRAM",
   "logo": {
-    "light": "/images/bram_logo_light.svg",
-    "dark": "/images/bram_logo_dark.svg"
+    "light": "/images/bram_logo_black.png",
+    "dark": "/images/bram_logo_white.png"
   },
-  "favicon": "/images/bram_gateway_logo.png",
+  "favicon": "/images/bram_logo_color.png",
   "colors": {
     "primary": "#7c3aed",
     "light": "#c4b5fd",
@@ -55,11 +55,6 @@
       "name": "Changelog",
       "icon": "clock-rotate-left",
       "url": "https://getbram.com/changelog"
-    },
-    {
-      "name": "GitHub",
-      "icon": "github",
-      "url": "https://github.com/bram-ai"
     }
   ],
   "navigation": [
@@ -113,7 +108,6 @@
     }
   ],
   "footerSocials": {
-    "github": "https://github.com/bram-ai",
     "x": "https://x.com/bram_ai",
     "linkedin": "https://www.linkedin.com/company/bram-ai"
   }
