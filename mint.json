@@ -2,8 +2,8 @@
   "$schema": "https://mintlify.com/schema.json",
   "name": "BRAM",
   "logo": {
-    "light": "/images/bram_logo_light.svg",
-    "dark": "/images/bram_logo_dark.svg"
+    "light": "/images/bram_logo_black.png",
+    "dark": "/images/bram_logo_white.png"
   },
   "favicon": "/images/favicon.ico",
   "colors": {
