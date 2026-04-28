@@ -2,20 +2,20 @@
   "$schema": "https://mintlify.com/schema.json",
   "name": "BRAM",
   "logo": {
-    "light": "/images/bram_logo_black.png",
-    "dark": "/images/bram_logo_white.png"
+    "light": "/images/bram_logo_light.svg",
+    "dark": "/images/bram_logo_dark.svg"
   },
-  "favicon": "/images/bram_logo_color.png",
+  "favicon": "/images/favicon.ico",
   "colors": {
-    "primary": "#7c3aed",
-    "light": "#c4b5fd",
-    "dark": "#5b21b6",
+    "primary": "#7587ED",
+    "light": "#99A7F1",
+    "dark": "#5C6FD9",
     "background": {
       "dark": "#03060f"
     },
     "anchors": {
-      "from": "#67e8f9",
-      "to": "#a78bfa"
+      "from": "#7587ED",
+      "to": "#99A7F1"
     }
   },
   "font": {
