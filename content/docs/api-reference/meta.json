@@ -1,0 +1,4 @@
+{
+  "title": "API Reference",
+  "pages": ["authentication", "evals/check", "evals/batch", "evals/projects", "evals/policies", "evals/keys", "evals/webhooks"]
+}

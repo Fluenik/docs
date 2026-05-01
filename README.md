@@ -1,41 +1,38 @@
 # docs.getbram.com
 
-Public documentation for [BRAM](https://getbram.com) — the AI trust platform. Built with [Mintlify](https://mintlify.com).
+Public documentation for [BRAM](https://getbram.com) — the AI trust platform. Built with Fumadocs and Next.js.
 
 ## Local development
 
 ```bash
-# one-time
-npm i -g mintlify
-
 # run the dev server at http://localhost:3000
-mintlify dev
+npm install
+npm run dev
 ```
 
-`mintlify dev` watches [mint.json](./mint.json) + every `.mdx` file and hot-reloads.
+`npm run dev` watches the app and every `.mdx` file and hot-reloads.
 
 ## Structure
 
 ```
 .
-├─ mint.json                 # navigation, theme, nav tabs
-├─ introduction.mdx          # landing page
-├─ quickstart.mdx
-├─ mcp/                      # BRAM MCP gateway
-├─ governance/               # policy model + approvals + audit
-├─ evals/                    # runtime API + datasets + webhooks
-├─ api-reference/            # REST endpoint reference
+├─ app/                      # Next.js routes, layout, and search API
+├─ content/docs/meta.json    # sidebar order and group labels
+├─ content/docs/index.mdx    # landing page
+├─ content/docs/quickstart.mdx
+├─ content/docs/mcp/         # BRAM MCP gateway
+├─ content/docs/governance/  # policy model + approvals + audit
+├─ content/docs/evals/       # runtime API + datasets + webhooks
+├─ content/docs/api-reference/
 │  └─ evals/
-├─ images/                   # logo + OG + inline screenshots
-└─ snippets/                 # MDX fragments used with <Snippet>
+└─ public/images/            # logo + favicon + inline screenshots
 ```
 
 ## Authoring
 
-- Content is **MDX** (Markdown + JSX). Standard markdown works; Mintlify's custom components (`<Card>`, `<CardGroup>`, `<Tabs>`, `<Steps>`, `<Accordion>`, `<CodeGroup>`, `<Note>`, `<Warning>`) render without imports.
-- Component reference: https://mintlify.com/docs/components/cards
+- Content is **MDX** (Markdown + JSX). Standard markdown works; local compatibility components (`<Card>`, `<CardGroup>`, `<Tabs>`, `<Steps>`, `<Accordion>`, `<CodeGroup>`, `<Note>`, `<Warning>`) render without imports.
 - Frontmatter at the top of each page sets `title` and `description`.
-- Add new pages by creating an `.mdx` file and registering it in the `navigation` array in `mint.json`.
+- Add new pages by creating an `.mdx` file and registering it in the nearest `meta.json`.
 
 ### Conventions
 
@@ -46,16 +43,12 @@ mintlify dev
 
 ## Deploy
 
-Mintlify auto-deploys from GitHub:
+Deploy this Next.js app to the self-hosted target for <https://docs.getbram.com>:
 
 ```bash
-# push to main — docs rebuild + deploy in ~60s
-git push origin main
+npm run build
+npm run start
 ```
-
-Configure the integration once at https://dashboard.mintlify.com → **Settings → Git Integration**. Point it at this repo; the default branch is the deployed site.
-
-Preview URLs are generated for every PR.
 
 ## CI
 
@@ -76,20 +69,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm i -g mintlify
-      - run: cd docs.getbram.com && mintlify broken-links
+      - run: cd docs.getbram.com && npm ci
+      - run: cd docs.getbram.com && npm run build
 ```
 
 ## OpenAPI reference
 
 The `POST /v1/evals/check` doc uses Mintlify's `openapi` frontmatter pointing at a spec. To auto-generate every endpoint, add:
 
-```json
-// in mint.json
-"openapi": "https://api.getbram.com/openapi.json"
-```
-
-We don't ship that yet — the API reference pages are hand-written so they can cover patterns that the raw spec wouldn't (rotation pattern for keys, the confidence band for evals, etc.). Leave hand-written for now; generate the raw endpoint list as a fallback later.
+The API reference pages are hand-written so they can cover patterns that the raw spec would not, such as the rotation pattern for keys and the confidence band for evals.
 
 ## Contact
 

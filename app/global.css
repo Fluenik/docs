@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --bram-primary: #99a7f1;
+  --bram-primary-strong: #7587ed;
+  --bram-success: #85d9ae;
+  --bram-error: #f19797;
+  --bram-warning: #f2c497;
+  --bram-info: #97d4f1;
+  --bram-bg: #f9f8f6;
+  --bram-nav: #eeece7;
+  --bram-nav-border: #e0ded9;
+  --bram-surface: #fdfcfa;
+  --bram-ink: #292a2e;
+  --bram-ink-soft: rgb(0 0 0 / 62%);
+  --bram-line: #eeedeb;
+}
+
+@theme {
+  --color-fd-background: #f9f8f6;
+  --color-fd-foreground: #292a2e;
+  --color-fd-muted: #eeece7;
+  --color-fd-muted-foreground: rgb(0 0 0 / 62%);
+  --color-fd-popover: #fdfcfa;
+  --color-fd-popover-foreground: #292a2e;
+  --color-fd-card: #fdfcfa;
+  --color-fd-card-foreground: #292a2e;
+  --color-fd-border: #eeedeb;
+  --color-fd-primary: #99a7f1;
+  --color-fd-primary-foreground: #292a2e;
+  --color-fd-secondary: #eeece7;
+  --color-fd-secondary-foreground: #292a2e;
+  --color-fd-accent: rgb(153 167 241 / 22%);
+  --color-fd-accent-foreground: #292a2e;
+  --color-fd-ring: #99a7f1;
+  --color-fd-info: #97d4f1;
+  --color-fd-success: #85d9ae;
+  --color-fd-warning: #f2c497;
+  --color-fd-error: #f19797;
+}
+
+.dark {
+  --bram-primary: #7587ed;
+  --bram-primary-strong: #99a7f1;
+  --bram-success: #52c08c;
+  --bram-error: #ed7575;
+  --bram-warning: #edb075;
+  --bram-info: #75c5ed;
+  --bram-bg: #0a0a0a;
+  --bram-nav: #000000;
+  --bram-nav-navy: #292a2e;
+  --bram-nav-border: #1d1d1d;
+  --bram-surface: #000000;
+  --bram-ink: #dbdbdb;
+  --bram-ink-soft: rgb(255 255 255 / 66%);
+  --bram-line: #141414;
+
+  --color-fd-background: #0a0a0a;
+  --color-fd-foreground: #dbdbdb;
+  --color-fd-muted: #141414;
+  --color-fd-muted-foreground: rgb(255 255 255 / 66%);
+  --color-fd-popover: #000000;
+  --color-fd-popover-foreground: #dbdbdb;
+  --color-fd-card: #000000;
+  --color-fd-card-foreground: #dbdbdb;
+  --color-fd-border: #141414;
+  --color-fd-primary: #7587ed;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #141414;
+  --color-fd-secondary-foreground: #dbdbdb;
+  --color-fd-accent: rgb(117 135 237 / 20%);
+  --color-fd-accent-foreground: #dbdbdb;
+  --color-fd-ring: #7587ed;
+  --color-fd-info: #75c5ed;
+  --color-fd-success: #52c08c;
+  --color-fd-warning: #edb075;
+  --color-fd-error: #ed7575;
+}
+
+body {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  background: var(--bram-bg);
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+.bram-docs-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--bram-ink);
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.bram-docs-logo__mark {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+}
+
+.bram-docs-logo__mark--dark {
+  display: none;
+}
+
+.dark .bram-docs-logo__mark--light {
+  display: none;
+}
+
+.dark .bram-docs-logo__mark--dark {
+  display: block;
+}
+
+::selection {
+  background: rgb(153 167 241 / 34%);
+}
+
+#nd-sidebar {
+  background: var(--bram-nav);
+  border-color: var(--bram-nav-border);
+}
+
+#nd-subnav {
+  border-color: var(--bram-nav-border);
+}
+
+#nd-subnav[data-transparent='false'] {
+  background: color-mix(in srgb, var(--bram-nav) 88%, transparent);
+}

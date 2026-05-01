@@ -1,0 +1,33 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "---Get started---",
+    "index",
+    "quickstart",
+    "---BRAM Gateway---",
+    "mcp/overview",
+    "mcp/installation",
+    "mcp/agents",
+    "mcp/policies",
+    "---Governance---",
+    "governance/overview",
+    "governance/policies",
+    "governance/approvals",
+    "governance/audit-logs",
+    "---Evals---",
+    "evals/overview",
+    "evals/quickstart",
+    "evals/policies",
+    "evals/runtime",
+    "evals/datasets",
+    "evals/webhooks",
+    "---API Reference---",
+    "api-reference/authentication",
+    "api-reference/evals/check",
+    "api-reference/evals/batch",
+    "api-reference/evals/projects",
+    "api-reference/evals/policies",
+    "api-reference/evals/keys",
+    "api-reference/evals/webhooks"
+  ]
+}
